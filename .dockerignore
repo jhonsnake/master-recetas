@@ -1,0 +1,25 @@
+# Node modules (serán instalados dentro del contenedor)
+node_modules
+**/node_modules
+
+# Archivos temporales
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Git y configs locales
+.git
+.gitignore
+
+# Entornos locales
+.env.local
+.env.development
+.env.test
+
+# Archivos de build antiguos (el build se hace en el contenedor)
+dist
