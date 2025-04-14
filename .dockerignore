@@ -22,4 +22,4 @@ Thumbs.db
 .env.test
 
 # Archivos de build antiguos (el build se hace en el contenedor)
-dist
+# dist

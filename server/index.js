@@ -5,12 +5,24 @@ import { dirname, join } from "path";
 import path from "path";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = 3000;
+
+// Endpoint temporal para debug: lista archivos en /dist/assets
+app.get('/debug-assets', (req, res) => {
+  const assetsPath = path.join(__dirname, '../dist/assets');
+  fs.readdir(assetsPath, (err, files) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ files });
+  });
+});
 
 // Middleware
 app.use(cors());
