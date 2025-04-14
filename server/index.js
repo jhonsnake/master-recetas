@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import path from 'path';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 
@@ -14,6 +15,10 @@ const port = 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the 'dist' directory
+app.use(express.static(path.join(__dirname, '../dist')));
+
 
 // Endpoint para búsqueda de imágenes
 app.get('/api/search-images', async (req, res) => {
