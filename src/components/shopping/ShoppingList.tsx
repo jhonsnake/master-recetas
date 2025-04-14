@@ -71,6 +71,14 @@ export function ShoppingList() {
   const [listName, setListName] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // Limpiar selectedTags si desaparecen de la lista dinámica
+  useEffect(() => {
+    const ingredientTags = ingredients.flatMap(item => item.ingredient.tags || []);
+    const allTags = Array.from(new Set([...SUGGESTED_TAGS, ...ingredientTags]));
+    setSelectedTags(prev => prev.filter(tag => allTags.includes(tag)));
+    // eslint-disable-next-line
+  }, [ingredients]);
   const [groupByTags, setGroupByTags] = useState(false);
 
   useEffect(() => {
@@ -635,21 +643,25 @@ export function ShoppingList() {
               </div>
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-gray-700">Categorías</h3>
-                <div className="flex flex-wrap gap-2">
-                  {SUGGESTED_TAGS.map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => handleTagToggle(tag)}
-                      className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                        selectedTags.includes(tag)
-                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      <Tag className="w-3 h-3" />
-                      {tag}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {(() => {
+                    const ingredientTags = ingredients.flatMap(item => item.ingredient.tags || []);
+                    const allTags = Array.from(new Set([...SUGGESTED_TAGS, ...ingredientTags]));
+                    return allTags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => handleTagToggle(tag)}
+                        className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
+                          selectedTags.includes(tag)
+                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        <Tag className="w-3 h-3" />
+                        {tag}
+                      </button>
+                    ));
+                  })()}
                 </div>
               </div>
             </div>

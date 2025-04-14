@@ -32,6 +32,14 @@ export function IngredientList() {
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // Limpiar selectedTags si desaparecen de la lista dinámica
+  useEffect(() => {
+    const ingredientTags = ingredients.flatMap(ing => ing.tags || []);
+    const allTags = Array.from(new Set([...SUGGESTED_TAGS, ...ingredientTags]));
+    setSelectedTags(prev => prev.filter(tag => allTags.includes(tag)));
+    // eslint-disable-next-line
+  }, [ingredients]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -104,6 +112,16 @@ export function IngredientList() {
         }
       } else {
         if (!confirm('¿Estás seguro de que deseas eliminar este ingrediente?')) return;
+      }
+
+      // Buscar el ingrediente para obtener la imagen
+      const ingredientToDelete = ingredients.find(ing => ing.id === id);
+      // Eliminar imagen de Supabase Storage si no es la imagen por defecto
+      if (ingredientToDelete && ingredientToDelete.image_url && !ingredientToDelete.image_url.includes('unsplash.com')) {
+        const path = ingredientToDelete.image_url.split('/storage/v1/object/public/ingredients/')[1];
+        if (path) {
+          await supabase.storage.from('ingredients').remove([path]);
+        }
       }
 
       // Delete unit equivalences first

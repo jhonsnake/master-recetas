@@ -216,6 +216,17 @@ export function IngredientForm({ onClose, editingIngredient }: IngredientFormPro
       let ingredientId = editingIngredient?.id;
 
       if (editingIngredient) {
+        // Si la imagen cambió y la anterior no es la de Unsplash, bórrala de Supabase Storage
+        if (
+          editingIngredient.image_url &&
+          editingIngredient.image_url !== finalImageUrl &&
+          !editingIngredient.image_url.includes('unsplash.com')
+        ) {
+          const path = editingIngredient.image_url.split('/storage/v1/object/public/ingredients/')[1];
+          if (path) {
+            await supabase.storage.from('ingredients').remove([path]);
+          }
+        }
         // Update existing ingredient
         const { error: updateError } = await supabase
           .from('ingredients')
