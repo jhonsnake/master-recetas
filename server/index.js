@@ -67,12 +67,13 @@ app.get("/api/search-images", async (req, res) => {
 });
 
 // Fallback para SPA (React/Vite)
-app.get('*', (req, res) => {
+app.get('*', (req, res, next) => {
+  // Si la ruta tiene punto (.), probablemente es un asset estático: pasa al siguiente middleware (404 si no existe)
   if (req.path.includes('.')) {
-    res.status(404).end();
-  } else {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+    return next();
   }
+  // Si no, sirve el index.html (SPA)
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 app.listen(port, () => {
