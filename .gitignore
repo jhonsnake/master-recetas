@@ -36,6 +36,7 @@ bower_components
 
 # Compiled binary addons (https://nodejs.org/api/addons.html)
 build/Release
+dist
 
 # Dependency directories
 node_modules/
@@ -86,3 +87,10 @@ typings/
 
 # DynamoDB Local files
 .dynamodb/
+
+# Mac system files
+.DS_Store
+# Windows system files
+Thumbs.db
+# Linux system files
+*~
