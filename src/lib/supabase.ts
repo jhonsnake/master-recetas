@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../types/supabase'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -19,3 +19,27 @@ export const supabase = createClient<Database>(
     }
   }
 )
+
+export async function insertNewUser(
+  supabase: SupabaseClient<Database>,
+  id: string,
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase.from('users').insert({
+    id: id,
+    email: email,
+    status: 'pending'
+  }).select();
+
+  if (error) {
+    console.error('Error inserting new user:', error);
+    return { success: false, error: error.message };
+  }
+
+  if (data && data.length > 0) {
+      console.log('New user inserted:', data);
+      return { success: true };
+  } else {
+      return { success: false, error: "No data returned after inserting user" };
+  }
+}

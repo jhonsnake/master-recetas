@@ -7,6 +7,13 @@ export type RecipeIngredient = Database['public']['Tables']['recipe_ingredients'
 export type RecipeWithIngredients = Database['public']['Views']['recipe_with_ingredients']['Row'];
 export type Person = Database['public']['Tables']['persons']['Row'];
 
+export interface User {
+  email: string;
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface StandardUnit {
   name: string;
   abbreviation: string;
