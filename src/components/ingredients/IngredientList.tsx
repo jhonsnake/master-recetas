@@ -202,21 +202,26 @@ export function IngredientList() {
           />
         </div>
 
+        {/* Filtros de etiquetas dinámicos: sugeridas + todas las usadas en ingredientes, sin duplicados */}
         <div className="flex flex-wrap gap-2">
-          {SUGGESTED_TAGS.map(tag => (
-            <button
-              key={tag}
-              onClick={() => handleTagToggle(tag)}
-              className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                selectedTags.includes(tag)
-                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Tag className="w-3 h-3" />
-              {tag}
-            </button>
-          ))}
+          {(() => {
+            const ingredientTags = ingredients.flatMap(ing => ing.tags || []);
+            const allTags = Array.from(new Set([...SUGGESTED_TAGS, ...ingredientTags]));
+            return allTags.map(tag => (
+              <button
+                key={tag}
+                onClick={() => handleTagToggle(tag)}
+                className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
+                  selectedTags.includes(tag)
+                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Tag className="w-3 h-3" />
+                {tag}
+              </button>
+            ));
+          })()}
         </div>
       </div>
 
