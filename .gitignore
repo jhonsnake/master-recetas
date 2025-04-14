@@ -94,3 +94,6 @@ typings/
 Thumbs.db
 # Linux system files
 *~
+
+.idx/
+.vscode/
