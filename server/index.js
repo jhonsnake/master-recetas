@@ -55,8 +55,12 @@ app.get("/api/search-images", async (req, res) => {
 });
 
 // Fallback para SPA (React/Vite)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../dist/index.html"));
+app.get('*', (req, res) => {
+  if (req.path.includes('.')) {
+    res.status(404).end();
+  } else {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  }
 });
 
 app.listen(port, () => {
