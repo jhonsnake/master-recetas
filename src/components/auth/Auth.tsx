@@ -87,13 +87,16 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     const { error } = await supabase.auth.signOut();
-    setUser({} as any)
+    // Refresca el usuario tras logout
+    const { data: userData } = await supabase.auth.getUser();
+    setUser(userData?.user || null);
+    setUserLoading(false);
     if (error) {
       setError(error.message);
       setUserError(error.message);
     }
-
     setLoading(false);
+    setError(null);
     onLoginSuccess();
   };
 
