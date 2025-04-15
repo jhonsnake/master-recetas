@@ -13,7 +13,7 @@ interface Recipe {
   total_protein: number;
   total_carbs: number;
   total_fat: number;
-  ingredients: {
+  ingredients?: {
     id: string;
     name: string;
     quantity: number;
@@ -22,6 +22,12 @@ interface Recipe {
     conversion_factor: number;
     conversion_text: string;
   }[];
+  live_total_nutrition?: {
+    calories?: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+  };
 }
 
 interface MealType {
@@ -51,7 +57,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
   const fetchRecipes = async () => {
     try {
       const { data, error } = await supabase
-        .from('recipe_with_ingredients')
+        .from('recipe_with_live_nutrition')
         .select('*');
 
       if (error) throw error;
@@ -169,17 +175,17 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
                                   <div>
                                     <div className="font-medium">{meal.recipe.name}</div>
                                     <div className="text-sm text-gray-600 grid grid-cols-2 gap-1 mt-1">
-                                      <div>Calorías: {Math.round(meal.recipe.calories)}</div>
-                                      <div>Proteínas: {Math.round(meal.recipe.protein)}g</div>
-                                      <div>Carbohidratos: {Math.round(meal.recipe.carbs)}g</div>
-                                      <div>Grasas: {Math.round(meal.recipe.fat)}g</div>
+                                      <div>Calorías: {typeof meal.recipe.live_total_nutrition?.calories === 'number' ? Math.round(meal.recipe.live_total_nutrition.calories) : 'N/A'}</div>
+                                      <div>Proteínas: {typeof meal.recipe.live_total_nutrition?.protein === 'number' ? Math.round(meal.recipe.live_total_nutrition.protein) : 'N/A'}g</div>
+                                      <div>Carbohidratos: {typeof meal.recipe.live_total_nutrition?.carbs === 'number' ? Math.round(meal.recipe.live_total_nutrition.carbs) : 'N/A'}g</div>
+                                      <div>Grasas: {typeof meal.recipe.live_total_nutrition?.fat === 'number' ? Math.round(meal.recipe.live_total_nutrition.fat) : 'N/A'}g</div>
                                     </div>
                                   </div>
                                   <div className="flex space-x-2">
                                     <button
-                                      onClick={() => setShowIngredients(
-                                        showIngredients === meal.recipe.id ? null : meal.recipe.id
-                                      )}
+                                      onClick={() =>
+                                        setShowIngredients(showIngredients === meal.recipe.id ? null : meal.recipe.id)
+                                      }
                                       className="p-1 text-gray-400 hover:text-gray-600"
                                     >
                                       <Info className="w-4 h-4" />
@@ -199,7 +205,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
                                       Ingredientes:
                                     </h5>
                                     <ul className="space-y-1">
-                                      {recipes.find(r => r.id === meal.recipe.id)?.ingredients.map((ingredient, idx) => (
+                                      {recipes.find(r => r.id === meal.recipe.id)?.ingredients?.map((ingredient, idx) => (
                                         <li key={idx} className="text-sm text-gray-600">
                                           • {ingredient.name}: {ingredient.conversion_text}
                                         </li>
@@ -253,23 +259,10 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
                       <div className="flex-grow">
                         <h4 className="font-medium mb-2">{recipe.name}</h4>
                         <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
-                          <div>Calorías: {Math.round(recipe.total_calories)}</div>
-                          <div>Proteínas: {Math.round(recipe.total_protein)}g</div>
-                          <div>Carbohidratos: {Math.round(recipe.total_carbs)}g</div>
-                          <div>Grasas: {Math.round(recipe.total_fat)}g</div>
-                        </div>
-
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">
-                            Ingredientes:
-                          </h5>
-                          <ul className="space-y-1">
-                            {recipe.ingredients.map((ingredient, idx) => (
-                              <li key={idx} className="text-sm text-gray-600">
-                                • {ingredient.name}: {ingredient.conversion_text}
-                              </li>
-                            ))}
-                          </ul>
+                          <div>Calorías: {typeof recipe.live_total_nutrition?.calories === 'number' ? Math.round(recipe.live_total_nutrition.calories) : 'N/A'}</div>
+                          <div>Proteínas: {typeof recipe.live_total_nutrition?.protein === 'number' ? Math.round(recipe.live_total_nutrition.protein) : 'N/A'}g</div>
+                          <div>Carbohidratos: {typeof recipe.live_total_nutrition?.carbs === 'number' ? Math.round(recipe.live_total_nutrition.carbs) : 'N/A'}g</div>
+                          <div>Grasas: {typeof recipe.live_total_nutrition?.fat === 'number' ? Math.round(recipe.live_total_nutrition.fat) : 'N/A'}g</div>
                         </div>
                       </div>
                     </div>

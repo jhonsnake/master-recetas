@@ -365,9 +365,9 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
 
       toast.success(editingRecipe ? 'Receta actualizada correctamente' : 'Receta guardada correctamente');
       onClose();
-    } catch (err) {
-      console.error('Error saving recipe:', err);
-      setError(err instanceof Error ? err.message : 'Error al guardar la receta');
+    } catch (error) {
+      console.error('Error al guardar la receta:', error);
+      setError(error instanceof Error ? error.message : 'Error al guardar la receta');
     }
   };
 
