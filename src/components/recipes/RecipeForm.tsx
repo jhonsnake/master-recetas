@@ -268,6 +268,28 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    // Calcular total_nutrition
+    const total_nutrition = ingredients.reduce(
+      (totals, ing) => {
+        // Buscar el factor de conversión de la unidad seleccionada
+        const unit = ing.availableUnits.find(u => u.name === ing.unit_name) || { conversion_factor: 1 };
+        const factor = unit.conversion_factor;
+        // Si el ingrediente tiene nutritional_values (vista), o los campos directos (tabla)
+        const nv = (ing.ingredient.nutritional_values || ing.ingredient);
+        // Si algún valor es null, tomar 0
+        const qty = ing.quantity * factor;
+        return {
+          calories: totals.calories + (nv.calories || 0) * qty,
+          protein: totals.protein + (nv.protein || 0) * qty,
+          carbs: totals.carbs + (nv.carbs || 0) * qty,
+          fat: totals.fat + (nv.fat || 0) * qty,
+          fiber: totals.fiber + (nv.fiber || 0) * qty,
+          sugar: totals.sugar + (nv.sugar || 0) * qty,
+        };
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
+    );
+
     e.preventDefault();
     setError(null);
 
@@ -292,7 +314,8 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
         ...formData,
         image_url: finalImageUrl || PLACEHOLDER_IMAGE,
         user_id: null,
-        instructions: formData.instructions.filter(i => i.trim())
+        instructions: formData.instructions.filter(i => i.trim()),
+        total_nutrition,
       };
 
       let recipe;

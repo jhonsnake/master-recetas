@@ -286,14 +286,25 @@ export function ShoppingList() {
     if (!item.ingredient.unit_equivalences?.length) return [];
 
     const quantity = item.customQuantity ?? item.totalQuantity;
+    // Siempre calcula la cantidad en base_unit
     const baseQuantity = item.customUnit ? 
       convertToBaseUnit(quantity, item.customUnit, item.ingredient) :
       quantity;
 
-    return item.ingredient.unit_equivalences.map(ue => ({
-      unit: ue.unit_name,
-      quantity: Math.round((baseQuantity / ue.conversion_factor) * 100) / 100
-    }));
+    // Equivalencia en la unidad base
+    const equivalences = [
+      {
+        unit: item.ingredient.base_unit,
+        quantity: Math.round(baseQuantity * 100) / 100
+      },
+      // Equivalencias relativas
+      ...item.ingredient.unit_equivalences.map(ue => ({
+        unit: ue.unit_name,
+        quantity: Math.round((baseQuantity / ue.conversion_factor) * 100) / 100
+      }))
+    ];
+
+    return equivalences;
   };
 
   const convertToBaseUnit = (quantity: number, unit: string, ingredient: Ingredient) => {
@@ -732,14 +743,16 @@ export function ShoppingList() {
                                         defaultValue={item.customUnit ?? item.ingredient.base_unit}
                                         className="px-2 py-1 border border-gray-300 rounded-md"
                                       >
-                                        <option value={item.ingredient.base_unit}>
-                                          {item.ingredient.base_unit}
-                                        </option>
-                                        {item.ingredient.unit_equivalences?.map((ue) => (
-                                          <option key={ue.unit_name} value={ue.unit_name}>
-                                            {ue.unit_name}
-                                          </option>
-                                        ))}
+                                        {[
+                                          item.ingredient.base_unit,
+                                          ...(item.ingredient.unit_equivalences?.map(ue => ue.unit_name) ?? [])
+                                        ]
+                                          .filter((v, i, arr) => arr.indexOf(v) === i) // elimina duplicados
+                                          .map(unit => (
+                                            <option key={unit} value={unit}>
+                                              {unit}
+                                            </option>
+                                          ))}
                                       </select>
                                       <button
                                         onClick={() => {
