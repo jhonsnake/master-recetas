@@ -223,7 +223,14 @@ export function RecipeList() {
 
       {showDetails && selectedRecipe && (
         <RecipeDetails
-          recipe={selectedRecipe}
+          recipe={{
+            ...selectedRecipe,
+            ingredients: selectedRecipe.ingredients || selectedRecipe.recipe_ingredients || [],
+            instructions: selectedRecipe.instructions || [],
+            total_nutrition: selectedRecipe.total_nutrition || selectedRecipe.live_total_nutrition || {
+              calories: 0, protein: 0, carbs: 0, fat: 0
+            }
+          }}
           onClose={() => {
             setSelectedRecipe(null);
             setShowDetails(false);
