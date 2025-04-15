@@ -267,31 +267,8 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    // Calcular total_nutrition
-    const total_nutrition = ingredients.reduce(
-      (totals, ing) => {
-        // Buscar el factor de conversión de la unidad seleccionada
-        const unit = ing.availableUnits.find(u => u.name === ing.unit_name) || { conversion_factor: 1 };
-        const factor = unit.conversion_factor;
-        // Si el ingrediente tiene nutritional_values (vista), o los campos directos (tabla)
-        const nv = (ing.ingredient.nutritional_values || ing.ingredient);
-        // Si algún valor es null, tomar 0
-        const qty = ing.quantity * factor;
-        return {
-          calories: totals.calories + (nv.calories || 0) * qty,
-          protein: totals.protein + (nv.protein || 0) * qty,
-          carbs: totals.carbs + (nv.carbs || 0) * qty,
-          fat: totals.fat + (nv.fat || 0) * qty,
-          fiber: totals.fiber + (nv.fiber || 0) * qty,
-          sugar: totals.sugar + (nv.sugar || 0) * qty,
-        };
-      },
-      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
-    );
-
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
 
     if (ingredients.length === 0) {
       setError('Debes agregar al menos un ingrediente');
@@ -309,6 +286,34 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
       if (imageFile) {
         finalImageUrl = await uploadImage(imageFile);
       }
+
+      // Calcular total_nutrition
+      const total_nutrition = ingredients.reduce(
+        (totals, ing) => {
+          const unit = ing.availableUnits.find(u => u.name === ing.unit_name) || { conversion_factor: 1 };
+          const factor = unit.conversion_factor;
+          const nv = ing.ingredient;
+          const cantidadEnBase = ing.quantity * factor;
+          const proporcion = cantidadEnBase / ing.ingredient.base_quantity;
+          console.log('[NUTRICION] Ingrediente:', nv.name);
+          console.log('  - Cantidad:', ing.quantity, ing.unit_name);
+          console.log('  - Factor conversión:', factor);
+          console.log('  - Cantidad en base:', cantidadEnBase, nv.base_unit);
+          console.log('  - Base quantity:', nv.base_quantity, nv.base_unit);
+          console.log('  - Proporción:', proporcion);
+          console.log('  - Valores base: Cal:', nv.calories, 'Prot:', nv.protein, 'Carb:', nv.carbs, 'Fat:', nv.fat, 'Fiber:', nv.fiber, 'Sugar:', nv.sugar);
+          console.log('  - Parcial: Cal:', (nv.calories || 0) * proporcion, 'Prot:', (nv.protein || 0) * proporcion, 'Carb:', (nv.carbs || 0) * proporcion, 'Fat:', (nv.fat || 0) * proporcion, 'Fiber:', (nv.fiber || 0) * proporcion, 'Sugar:', (nv.sugar || 0) * proporcion);
+          return {
+            calories: totals.calories + (nv.calories || 0) * proporcion,
+            protein: totals.protein + (nv.protein || 0) * proporcion,
+            carbs: totals.carbs + (nv.carbs || 0) * proporcion,
+            fat: totals.fat + (nv.fat || 0) * proporcion,
+            fiber: totals.fiber + (nv.fiber || 0) * proporcion,
+            sugar: totals.sugar + (nv.sugar || 0) * proporcion,
+          };
+        },
+        { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
+      );
 
       const recipeData = {
         ...formData,

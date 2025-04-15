@@ -26,7 +26,7 @@ export function RecipeList() {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('recipe_with_ingredients')
+        .from('recipe_with_live_nutrition')
         .select('*')
         .order('name');
 
@@ -159,25 +159,29 @@ export function RecipeList() {
                 <div className="space-y-2">
                   <div className="text-sm text-gray-500">
                     <span className="font-medium">Ingredientes:</span>{' '}
-                    {recipe.ingredients.length}
+                    {recipe.recipe_ingredients ? recipe.recipe_ingredients.length : 0}
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span className="font-medium">Calorías:</span>{' '}
-                      {Math.round(recipe.total_nutrition.calories)}
+                      {Math.round(recipe.live_total_nutrition?.calories || 0)}
+                    </div>
+                    <div>
+                      <span className="font-medium">Fibra:</span>{' '}
+                      {Math.round(recipe.live_total_nutrition?.fiber || 0)}g
                     </div>
                     <div>
                       <span className="font-medium">Proteínas:</span>{' '}
-                      {Math.round(recipe.total_nutrition.protein)}g
+                      {Math.round(recipe.live_total_nutrition?.protein || 0)}g
                     </div>
                     <div>
-                      <span className="font-medium">Carbohidratos:</span>{' '}
-                      {Math.round(recipe.total_nutrition.carbs)}g
+                      <span className="font-medium">Azúcares:</span>{' '}
+                      {Math.round(recipe.live_total_nutrition?.sugar || 0)}g
                     </div>
                     <div>
                       <span className="font-medium">Grasas:</span>{' '}
-                      {Math.round(recipe.total_nutrition.fat)}g
+                      {Math.round(recipe.live_total_nutrition?.fat || 0)}g
                     </div>
                   </div>
                 </div>
