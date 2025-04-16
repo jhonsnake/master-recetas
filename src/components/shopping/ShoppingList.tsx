@@ -210,6 +210,8 @@ export function ShoppingList() {
           ingredients
         `)
         .in('date', dates);
+      // LOG temporal para depuración
+      console.log('mealPlanDetails desde Supabase:', mealPlanDetails);
 
       if (mealPlanDetailsError) throw mealPlanDetailsError;
 
@@ -261,7 +263,8 @@ existing.totalQuantity += ing.quantity;
         });
       });
 
-      setIngredients(Array.from(ingredientMap.values()));
+      console.log('ingredientMap agrupado:', Array.from(ingredientMap.values()));
+setIngredients(Array.from(ingredientMap.values()));
     } catch (error) {
       console.error('Error fetching weekly ingredients:', error);
       toast.error('Error al cargar la lista de compras');
@@ -835,7 +838,7 @@ existing.totalQuantity += ing.quantity;
   const portions = recipe.porciones ?? recipe.portions;
   return (
     <div key={index} className="text-sm text-gray-600">
-      • {recipe.name} - {recipe.meal_type} ({format(new Date(recipe.date), 'EEEE d', { locale: es })})
+      • {recipe.name} - {recipe.meal_type} ({format(parseISO(recipe.date), 'EEEE d', { locale: es })})
       {typeof recipe.quantity !== 'undefined' && recipe.unit_name && (
         <span className="ml-2 text-xs text-gray-500">{recipe.quantity} {recipe.unit_name}</span>
       )}
