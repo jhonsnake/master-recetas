@@ -23,16 +23,26 @@ interface RecipeIngredientInput {
 const AVAILABLE_TAGS = ['Desayuno', 'Almuerzo', 'Cena', 'Merienda', 'Snack'];
 
 function NutritionPreview({ ingredients, porciones }: { ingredients: any[]; porciones: number }) {
-  // Sumar los nutrientes de todos los ingredientes
+  // Sumar los nutrientes de todos los ingredientes considerando el conversion_factor de la unidad seleccionada
   const total = ingredients.reduce((acc, item) => {
     const n = item.ingredient?.nutritional_values || item.ingredient || {};
+    // Buscar el conversion_factor correspondiente a la unidad seleccionada
+    let conversion_factor = 1;
+    if (item.availableUnits && item.unit_name) {
+      const foundUnit = item.availableUnits.find((u: any) => u.name === item.unit_name);
+      if (foundUnit) conversion_factor = foundUnit.conversion_factor;
+    }
+    const base_quantity = item.ingredient.base_quantity || 1;
+    const cantidad_real = base_quantity > 0
+      ? ((item.quantity || 0) * conversion_factor) / base_quantity
+      : 0;
     return {
-      calories: acc.calories + (n.calories ? n.calories * (item.quantity || 0) : 0),
-      protein: acc.protein + (n.protein ? n.protein * (item.quantity || 0) : 0),
-      carbs: acc.carbs + (n.carbs ? n.carbs * (item.quantity || 0) : 0),
-      fat: acc.fat + (n.fat ? n.fat * (item.quantity || 0) : 0),
-      fiber: acc.fiber + (n.fiber ? n.fiber * (item.quantity || 0) : 0),
-      sugar: acc.sugar + (n.sugar ? n.sugar * (item.quantity || 0) : 0),
+      calories: acc.calories + (n.calories ? n.calories * cantidad_real : 0),
+      protein: acc.protein + (n.protein ? n.protein * cantidad_real : 0),
+      carbs: acc.carbs + (n.carbs ? n.carbs * cantidad_real : 0),
+      fat: acc.fat + (n.fat ? n.fat * cantidad_real : 0),
+      fiber: acc.fiber + (n.fiber ? n.fiber * cantidad_real : 0),
+      sugar: acc.sugar + (n.sugar ? n.sugar * cantidad_real : 0),
     };
   }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 });
 
@@ -126,6 +136,7 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
     }
 
     const loadedIngredients = recipeIngredients.map(ri => {
+  console.log('DEBUG ingredient:', ri.ingredients);
       const ingredient = ri.ingredients;
       const customUnits = ingredient.unit_equivalences?.map(ue => ({
         name: ue.unit_name,
@@ -133,7 +144,17 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
       })) || [];
 
       return {
-        ingredient,
+        ingredient: {
+          ...ingredient,
+          nutritional_values: {
+            calories: ingredient.calories || 0,
+            carbs: ingredient.carbs || 0,
+            fiber: ingredient.fiber || 0,
+            sugar: ingredient.sugar || 0,
+            fat: ingredient.fat || 0,
+            protein: ingredient.protein || 0
+          }
+        },
         quantity: ri.quantity,
         unit_name: ri.unit_name,
         availableUnits: [

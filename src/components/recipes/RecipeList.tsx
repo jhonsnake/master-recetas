@@ -127,78 +127,79 @@ export function RecipeList() {
           {filteredRecipes.map((recipe) => (
             <div
               key={recipe.id}
-              className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+              className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-gray-200 flex flex-col items-center overflow-hidden group"
             >
               <img
-                src={recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
+                src={recipe.image_url || '/placeholder.jpg'}
                 alt={recipe.name}
-                className="w-full h-48 object-cover"
+                className="w-full h-48 object-cover object-center bg-gray-100 group-hover:scale-105 transition-transform rounded-t-xl"
               />
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {recipe.name}
-                </h3>
-                {recipe.description && (
-                  <p className="text-gray-600 text-sm mb-4">{recipe.description}</p>
-                )}
+              <div className="w-full flex flex-col justify-between p-5" style={{maxWidth: 480}}>
 
-                {recipe.tags && recipe.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {recipe.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs flex items-center"
-                      >
-                        <Tag className="w-3 h-3 mr-1" />
-                        {tag}
-                      </span>
-                    ))}
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-1 leading-tight truncate">{recipe.name}</h3>
+                  {recipe.description && (
+                    <p className="text-gray-500 text-base mb-2 truncate">{recipe.description}</p>
+                  )}
+                  {recipe.tags && recipe.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {recipe.tags.map(tag => (
+                        <span
+                          key={tag}
+                          className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium flex items-center border border-blue-100"
+                        >
+                          <Tag className="w-3 h-3 mr-1" />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                      <b>{recipe.ingredients?.length ?? recipe.recipe_ingredients?.length ?? 0}</b> ingredientes
+                    </span>
+                    <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                      <b>{recipe.porciones ?? recipe.servings ?? 1}</b> porciones
+                    </span>
                   </div>
-                )}
-                
-                <div className="space-y-2">
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium">Ingredientes:</span>{' '}
-                    {recipe.recipe_ingredients ? recipe.recipe_ingredients.length : 0}
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="font-medium">Calorías:</span>{' '}
-                      {Math.round(recipe.live_total_nutrition?.calories || 0)}
-                    </div>
-                    <div>
-                      <span className="font-medium">Fibra:</span>{' '}
-                      {Math.round(recipe.live_total_nutrition?.fiber || 0)}g
-                    </div>
-                    <div>
-                      <span className="font-medium">Proteínas:</span>{' '}
-                      {Math.round(recipe.live_total_nutrition?.protein || 0)}g
-                    </div>
-                    <div>
-                      <span className="font-medium">Azúcares:</span>{' '}
-                      {Math.round(recipe.live_total_nutrition?.sugar || 0)}g
-                    </div>
-                    <div>
-                      <span className="font-medium">Grasas:</span>{' '}
-                      {Math.round(recipe.live_total_nutrition?.fat || 0)}g
+                  <div className="my-3">
+                    <div className="text-xs font-semibold text-gray-700 mb-1 tracking-wide">Por porción aporta:</div>
+                    <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 flex flex-col gap-2">
+                      {(() => {
+                        const servings = recipe.porciones ?? recipe.servings ?? 1;
+                        const nut = recipe.live_total_nutrition || {};
+                        const badge = (label: string, value: string | number, color: string) => (
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium ${color}`}>
+                            <span className="inline-block min-w-[70px]">{label}:</span>
+                            <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{value}</span>
+                          </span>
+                        );
+                        return (
+                          <div className="flex flex-wrap gap-2">
+                            {badge('Calorías', Math.round((nut.calories || 0) / servings), 'text-orange-600')}
+                            {badge('Proteínas', Math.round((nut.protein || 0) / servings) + 'g', 'text-green-700')}
+                            {badge('Grasas', Math.round((nut.fat || 0) / servings) + 'g', 'text-yellow-700')}
+                            {badge('Fibra', Math.round((nut.fiber || 0) / servings) + 'g', 'text-blue-700')}
+                            {badge('Azúcares', Math.round((nut.sugar || 0) / servings) + 'g', 'text-pink-700')}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
-
-                <div className="mt-4 flex justify-between items-center">
+                <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
                   <button
                     onClick={() => {
                       setEditingRecipe(recipe);
                       setShowForm(true);
                     }}
-                    className="text-blue-600 hover:text-blue-700 flex items-center text-sm font-medium"
+                    className="px-3 py-1 text-blue-700 hover:bg-blue-50 rounded font-semibold text-sm transition-colors"
                   >
-                    Editar receta
+                    Editar
                   </button>
                   <button
                     onClick={() => handleViewDetails(recipe)}
-                    className="text-blue-600 hover:text-blue-700 flex items-center text-sm font-medium"
+                    className="px-3 py-1 text-gray-700 hover:bg-gray-100 rounded font-semibold text-sm transition-colors flex items-center"
                   >
                     Ver detalles
                     <ChevronRight className="w-4 h-4 ml-1" />

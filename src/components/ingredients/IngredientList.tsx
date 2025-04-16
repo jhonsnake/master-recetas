@@ -249,94 +249,96 @@ export function IngredientList() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredIngredients.map((ingredient) => (
-            <div
-              key={ingredient.id}
-              className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
-            >
-              <img
-                src={getImageUrl(ingredient)}
-                alt={ingredient.name}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {ingredient.name}
-                </h3>
-                <p className="text-gray-600 text-sm mb-4">{ingredient.description}</p>
-
-                {ingredient.tags && ingredient.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {ingredient.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs flex items-center"
-                      >
-                        <Tag className="w-3 h-3 mr-1" />
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                
-                <div className="mb-4">
-                  <div className="text-sm font-medium text-gray-700">
-                    Tamaño de la porción:
-                    <span className="ml-1 font-normal">
-                      {ingredient.base_quantity} {ingredient.base_unit}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-sm mb-4">
-                  <div>
-                    <span className="font-medium">Calorías:</span> {ingredient.calories}
-                  </div>
-                  <div>
-                    <span className="font-medium">Carbohidratos:</span> {ingredient.carbs}g
-                  </div>
-                  <div>
-                    <span className="font-medium">Proteínas:</span> {ingredient.protein}g
-                  </div>
-                  <div>
-                    <span className="font-medium">Grasas:</span> {ingredient.fat}g
-                  </div>
-                </div>
-
-                {ingredient.unit_equivalences && ingredient.unit_equivalences.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-1">Unidades de referencia:</h4>
-                    <div className="space-y-1">
-                      {ingredient.unit_equivalences.map((unit, index) => (
-                        <div key={index} className="text-sm text-gray-600">
-                          1 {unit.unit_name} = {unit.conversion_factor} {ingredient.base_unit}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end space-x-2">
-                  <button
-                    onClick={() => {
-                      setEditingIngredient(ingredient);
-                      setShowForm(true);
-                    }}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(ingredient.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+  {filteredIngredients.map((ingredient) => (
+    <div
+      key={ingredient.id}
+      className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-gray-200 flex flex-col items-center overflow-hidden group"
+    >
+      <img
+        src={getImageUrl(ingredient)}
+        alt={ingredient.name}
+        className="w-full h-48 object-cover object-center bg-gray-100 group-hover:scale-105 transition-transform rounded-t-xl"
+      />
+      <div className="w-full flex flex-col justify-between p-5" style={{maxWidth: 480}}>
+        <div>
+          <h3 className="text-2xl font-bold text-gray-900 mb-1 leading-tight truncate">{ingredient.name}</h3>
+          {ingredient.description && (
+            <p className="text-gray-500 text-base mb-2 line-clamp-2">{ingredient.description}</p>
+          )}
+          {ingredient.tags && ingredient.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {ingredient.tags.map(tag => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 mr-1 mb-1 flex items-center gap-1"
+                >
+                  <Tag className="w-3 h-3" /> {tag}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+              <b>{ingredient.base_quantity}</b> {ingredient.base_unit}
+            </span>
+          </div>
+          <div className="my-3">
+            <div className="text-xs font-semibold text-gray-700 mb-1 tracking-wide">Por porción:</div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600">
+                  <span className="inline-block min-w-[70px]">Calorías:</span>
+                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.calories}</span>
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
+                  <span className="inline-block min-w-[70px]">Proteínas:</span>
+                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.protein}g</span>
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700">
+                  <span className="inline-block min-w-[70px]">Grasas:</span>
+                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.fat}g</span>
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700">
+                  <span className="inline-block min-w-[70px]">Carbohidratos:</span>
+                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.carbs}g</span>
+                </span>
               </div>
             </div>
-          ))}
+          </div>
+          {ingredient.unit_equivalences && ingredient.unit_equivalences.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-1">Unidades de referencia:</h4>
+              <div className="space-y-1">
+                {ingredient.unit_equivalences.map((unit, index) => (
+                  <div key={index} className="text-sm text-gray-600">
+                    1 {unit.unit_name} = {unit.conversion_factor} {ingredient.base_unit}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+        <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
+          <button
+  onClick={() => {
+    setEditingIngredient(ingredient);
+    setShowForm(true);
+  }}
+  className="px-3 py-1 text-blue-700 hover:bg-blue-50 rounded font-semibold text-sm transition-colors"
+>
+  Editar
+</button>
+<button
+  onClick={() => handleDelete(ingredient.id)}
+  className="px-3 py-1 text-red-700 hover:bg-red-50 rounded font-semibold text-sm transition-colors"
+>
+  Eliminar
+</button>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
       )}
 
       {showForm && (
