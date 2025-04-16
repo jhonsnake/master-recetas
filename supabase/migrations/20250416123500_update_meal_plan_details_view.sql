@@ -1,4 +1,4 @@
--- Crea la view meal_plan_details para el meal planner
+-- Migration: Update meal_plan_details view to include full ingredient info (image_url, tags, unit_equivalences, conversion_text, etc)
 DROP VIEW IF EXISTS meal_plan_details CASCADE;
 
 CREATE VIEW meal_plan_details AS

@@ -23,6 +23,10 @@ interface Recipe {
   name: string;
   date: string;
   meal_type: string;
+  porciones?: number;
+  portions?: number;
+  quantity?: number;
+  unit_name?: string;
 }
 
 interface IngredientSummary {
@@ -192,84 +196,65 @@ export function ShoppingList() {
   const fetchWeeklyIngredients = async () => {
     setIsLoading(true);
     try {
-      const dates = Array.from({ length: 7 }, (_, i) => 
+      const dates = Array.from({ length: 7 }, (_, i) =>
         format(addDays(dateRange.start, i), 'yyyy-MM-dd')
       );
 
-      const { data: mealPlans, error: mealPlansError } = await supabase
-        .from('meal_plans')
+      const { data: mealPlanDetails, error: mealPlanDetailsError } = await supabase
+        .from('meal_plan_details')
         .select(`
-          recipe_id,
           date,
-          meal_types (
-            name
-          ),
-          recipes (
-            id,
-            name,
-            recipe_ingredients (
-              quantity,
-              unit_name,
-              ingredients (
-                id,
-                name,
-                base_unit,
-                base_quantity,
-                image_url,
-                tags,
-                unit_equivalences (
-                  unit_name,
-                  conversion_factor
-                )
-              )
-            )
-          )
+          meal_type,
+          recipe_id,
+          recipe_name,
+          ingredients
         `)
         .in('date', dates);
 
-      if (mealPlansError) throw mealPlansError;
+      if (mealPlanDetailsError) throw mealPlanDetailsError;
 
       const ingredientMap = new Map<string, IngredientSummary>();
 
-      mealPlans?.forEach(mealPlan => {
-        const recipe = mealPlan.recipes;
-        if (!recipe) return;
-
-        recipe.recipe_ingredients?.forEach(ri => {
-          const ingredient = ri.ingredients;
-          if (!ingredient) return;
-
-          // Multiplica la cantidad base por el número de porciones de la receta en el plan
-          let baseQuantity = ri.quantity;
-          const recipePortions = recipe.porciones || 1;
-          baseQuantity = baseQuantity * recipePortions;
-          if (ri.unit_name !== ingredient.base_unit) {
-            const conversion = ingredient.unit_equivalences?.find(
-              ue => ue.unit_name === ri.unit_name
+      mealPlanDetails?.forEach((card: any) => {
+        card.ingredients?.forEach((ing: any) => {
+          if (!ing || !ing.id) return;
+          const existing = ingredientMap.get(ing.id);
+          if (existing) {
+            // Sumar cantidad al total
+            // Solo suma la cantidad ya ajustada por porciones desde SQL
+existing.totalQuantity += ing.quantity;
+            // Buscar si ya existe una receta para ese día y receta
+            const recipeIdx = existing.recipes.findIndex(
+              r => r.id === card.recipe_id && r.date === card.date
             );
-            if (conversion) {
-              baseQuantity *= conversion.conversion_factor;
+            if (recipeIdx > -1) {
+              // Sumar cantidad y porciones a la entrada existente
+              existing.recipes[recipeIdx].quantity += ing.quantity;
+              existing.recipes[recipeIdx].porciones += ing.porciones;
+            } else {
+              // Agregar nueva entrada
+              existing.recipes.push({
+                id: card.recipe_id,
+                name: card.recipe_name,
+                date: card.date,
+                meal_type: card.meal_type,
+                quantity: ing.quantity,
+                unit_name: ing.unit_name,
+                porciones: ing.porciones
+              });
             }
-          }
-
-          const existingSummary = ingredientMap.get(ingredient.id);
-          if (existingSummary) {
-            existingSummary.totalQuantity += baseQuantity;
-            existingSummary.recipes.push({
-              id: recipe.id,
-              name: recipe.name,
-              date: mealPlan.date,
-              meal_type: mealPlan.meal_types?.name || ''
-            });
           } else {
-            ingredientMap.set(ingredient.id, {
-              ingredient,
-              totalQuantity: baseQuantity,
+            ingredientMap.set(ing.id, {
+              ingredient: ing,
+              totalQuantity: ing.quantity,
               recipes: [{
-                id: recipe.id,
-                name: recipe.name,
-                date: mealPlan.date,
-                meal_type: mealPlan.meal_types?.name || ''
+                id: card.recipe_id,
+                name: card.recipe_name,
+                date: card.date,
+                meal_type: card.meal_type,
+                quantity: ing.quantity,
+                unit_name: ing.unit_name,
+                porciones: ing.porciones
               }]
             });
           }
@@ -290,7 +275,7 @@ export function ShoppingList() {
 
     const quantity = item.customQuantity ?? item.totalQuantity;
     // Siempre calcula la cantidad en base_unit
-    const baseQuantity = item.customUnit ? 
+    const baseQuantity = item.customUnit ?
       convertToBaseUnit(quantity, item.customUnit, item.ingredient) :
       quantity;
 
@@ -312,10 +297,10 @@ export function ShoppingList() {
 
   const convertToBaseUnit = (quantity: number, unit: string, ingredient: Ingredient) => {
     if (unit === ingredient.base_unit) return quantity;
-    
+
     const conversion = ingredient.unit_equivalences?.find(ue => ue.unit_name === unit);
     if (!conversion) return quantity;
-    
+
     return quantity * conversion.conversion_factor;
   };
 
@@ -425,7 +410,7 @@ export function ShoppingList() {
 
       if (error) throw error;
 
-      setIngredients(ingredients.map(i => 
+      setIngredients(ingredients.map(i =>
         i.ingredient.id === ingredientId
           ? { ...i, customQuantity: quantity, customUnit: unit }
           : i
@@ -456,8 +441,8 @@ export function ShoppingList() {
 
       if (error) throw error;
 
-      setIngredients(prevIngredients => 
-        prevIngredients.map(i => 
+      setIngredients(prevIngredients =>
+        prevIngredients.map(i =>
           i.ingredient.id === ingredientId
             ? { ...i, purchased: newPurchased }
             : i
@@ -596,11 +581,10 @@ export function ShoppingList() {
               {savedLists.map((list) => (
                 <div
                   key={list.id}
-                  className={`p-2 rounded-md ${
-                    selectedList?.id === list.id
+                  className={`p-2 rounded-md ${selectedList?.id === list.id
                       ? 'bg-blue-50 text-blue-700'
                       : 'hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <div className="flex justify-between items-start">
                     <button
@@ -665,11 +649,10 @@ export function ShoppingList() {
                       <button
                         key={tag}
                         onClick={() => handleTagToggle(tag)}
-                        className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                          selectedTags.includes(tag)
+                        className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${selectedTags.includes(tag)
                             ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         <Tag className="w-3 h-3" />
                         {tag}
@@ -702,9 +685,8 @@ export function ShoppingList() {
                       {items.map((item) => (
                         <div
                           key={item.ingredient.id}
-                          className={`flex items-start space-x-4 p-4 rounded-lg ${
-                            item.purchased ? 'bg-green-50' : 'bg-gray-50'
-                          }`}
+                          className={`flex items-start space-x-4 p-4 rounded-lg ${item.purchased ? 'bg-green-50' : 'bg-gray-50'
+                            }`}
                         >
                           {item.ingredient.image_url && (
                             <img
@@ -716,11 +698,20 @@ export function ShoppingList() {
                           <div className="flex-grow">
                             <div className="flex justify-between items-start">
                               <div>
-                                <h3 className={`text-lg font-medium ${
-                                  item.purchased ? 'line-through text-gray-500' : 'text-gray-900'
-                                }`}>
-                                  {item.ingredient.name}
-                                </h3>
+                                <h3 className={`text-lg font-medium ${item.purchased ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+  {item.ingredient.name}
+</h3>
+{/* Mostrar SIEMPRE el total de porciones */}
+{(() => {
+  const totalPortions = item.recipes.reduce((acc, recipe) => {
+    const portions = recipe.porciones ?? recipe.portions ?? 0;
+    return acc + (typeof portions === 'number' ? portions : 0);
+  }, 0);
+  return (
+    <div className="text-xs text-gray-400">en {totalPortions} porciones</div>
+  );
+})()}
+
                                 <div className="text-gray-600 space-y-1">
                                   {editingItem === item.ingredient.id ? (
                                     <div className="flex items-center space-x-2">
@@ -817,11 +808,10 @@ export function ShoppingList() {
                                 {selectedList && (
                                   <button
                                     onClick={() => handleTogglePurchased(item.ingredient.id)}
-                                    className={`p-2 rounded-md ${
-                                      item.purchased
+                                    className={`p-2 rounded-md ${item.purchased
                                         ? 'bg-green-100 text-green-600'
                                         : 'bg-gray-100 text-gray-600'
-                                    }`}
+                                      }`}
                                   >
                                     <Check className="w-5 h-5" />
                                   </button>
@@ -841,30 +831,20 @@ export function ShoppingList() {
                               <div className="mt-4 space-y-2">
                                 <h4 className="font-medium text-gray-700">Se utilizará en:</h4>
                                 {item.recipes.map((recipe, index) => {
-                                  // Buscar la cantidad y unidad específica de este ingrediente en la receta
-                                  let cantidad = null;
-                                  let unidad = null;
-                                  let porciones = recipe.porciones || 1;
-                                  if (recipe.recipe_ingredients && Array.isArray(recipe.recipe_ingredients)) {
-                                    // Buscar el ingrediente actual en la receta
-                                    const found = recipe.recipe_ingredients.find(ri => ri.ingredients?.id === item.ingredient.id);
-                                    if (found) {
-                                      cantidad = found.quantity * porciones;
-                                      unidad = found.unit_name;
-                                    }
-                                  }
-                                  return (
-                                    <div key={index} className="text-sm text-gray-600">
-                                      • {recipe.name} - {recipe.meal_type} ({format(new Date(recipe.date), 'EEEE d', { locale: es })})
-                                      {cantidad !== null && unidad && (
-                                        <span className="ml-2 text-xs text-gray-500">{cantidad} {unidad} ({porciones} porciones)</span>
-                                      )}
-                                      {((cantidad === null || !unidad) && typeof porciones !== 'undefined') && (
-                                        <span className="ml-2 text-xs text-gray-400">({porciones} porciones)</span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+  // Ahora cada recipe en item.recipes tiene quantity y unit_name
+  const portions = recipe.porciones ?? recipe.portions;
+  return (
+    <div key={index} className="text-sm text-gray-600">
+      • {recipe.name} - {recipe.meal_type} ({format(new Date(recipe.date), 'EEEE d', { locale: es })})
+      {typeof recipe.quantity !== 'undefined' && recipe.unit_name && (
+        <span className="ml-2 text-xs text-gray-500">{recipe.quantity} {recipe.unit_name}</span>
+      )}
+      {portions && (
+        <span className="ml-2 text-xs text-gray-400">en {portions} porciones</span>
+      )}
+    </div>
+  );
+})}
                               </div>
                             )}
                           </div>

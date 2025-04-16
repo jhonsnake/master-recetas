@@ -1,4 +1,4 @@
--- Crea la view meal_plan_details para el meal planner
+-- Migration: Update meal_plan_details view to add 'porciones' to each ingredient
 DROP VIEW IF EXISTS meal_plan_details CASCADE;
 
 CREATE VIEW meal_plan_details AS
@@ -36,7 +36,8 @@ SELECT
         ),
         'quantity', ri.quantity,
         'unit_name', ri.unit_name,
-        'conversion_text', ri.conversion_text
+        'conversion_text', ri.conversion_text,
+        'porciones', mp.porciones
       )
     )
     FROM recipe_ingredients ri

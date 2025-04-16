@@ -1,4 +1,4 @@
--- Crea la view meal_plan_details para el meal planner
+-- Migration: Ajusta la cantidad de ingredientes según el número de porciones agendadas en el meal plan
 DROP VIEW IF EXISTS meal_plan_details CASCADE;
 
 CREATE VIEW meal_plan_details AS
@@ -34,9 +34,11 @@ SELECT
           FROM unit_equivalences ue
           WHERE ue.ingredient_id = i.id
         ),
-        'quantity', ri.quantity,
+        -- Ajuste de cantidad por porciones agendadas
+        'quantity', (ri.quantity * mp.porciones / NULLIF(r.porciones, 0)),
         'unit_name', ri.unit_name,
-        'conversion_text', ri.conversion_text
+        'conversion_text', ri.conversion_text,
+        'porciones', mp.porciones
       )
     )
     FROM recipe_ingredients ri
