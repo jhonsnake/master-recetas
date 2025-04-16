@@ -149,69 +149,73 @@ export function ShoppingList() {
   };
 
   const fetchSavedListItems = async (listId: string) => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('shopping_list_items')
-        .select(`
-          quantity,
-          custom_quantity,
-          custom_unit,
-          purchased,
-          ingredients (
-            id,
-            name,
-            base_unit,
-            base_quantity,
-            image_url,
-            tags,
-            unit_equivalences (
-              unit_name,
-              conversion_factor
-            )
+  setIsLoading(true);
+  try {
+    const { data, error } = await supabase
+      .from('shopping_list_items')
+      .select(`
+        quantity,
+        custom_quantity,
+        custom_unit,
+        purchased,
+        recipes,
+        ingredients (
+          id,
+          name,
+          base_unit,
+          base_quantity,
+          image_url,
+          tags,
+          unit_equivalences (
+            unit_name,
+            conversion_factor
           )
-        `)
-        .eq('shopping_list_id', listId);
+        )
+      `)
+      .eq('shopping_list_id', listId);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      const processedIngredients = data.map(item => ({
-        ingredient: item.ingredients,
-        totalQuantity: item.quantity,
-        customQuantity: item.custom_quantity,
-        customUnit: item.custom_unit,
-        recipes: [],
-        purchased: item.purchased
-      }));
+    const processedIngredients = data.map(item => ({
+      ingredient: item.ingredients,
+      totalQuantity: item.quantity,
+      customQuantity: item.custom_quantity,
+      customUnit: item.custom_unit,
+      recipes: item.recipes || [], // <-- Restaurar detalles de recetas
+      purchased: item.purchased
+    }));
 
-      setIngredients(processedIngredients);
-    } catch (error) {
-      console.error('Error fetching list items:', error);
-      toast.error('Error al cargar los items de la lista');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    setIngredients(processedIngredients);
+  } catch (error) {
+    console.error('Error fetching list items:', error);
+    toast.error('Error al cargar los items de la lista');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const fetchWeeklyIngredients = async () => {
-    setIsLoading(true);
-    try {
-      const dates = Array.from({ length: 7 }, (_, i) =>
-        format(addDays(dateRange.start, i), 'yyyy-MM-dd')
-      );
+  setIsLoading(true);
+  try {
+    // Generar todas las fechas entre start y end (incluyendo ambos extremos)
+    const dates = [];
+    let curr = dateRange.start;
+    while (curr <= dateRange.end) {
+      dates.push(format(curr, 'yyyy-MM-dd'));
+      curr = addDays(curr, 1);
+    }
 
-      const { data: mealPlanDetails, error: mealPlanDetailsError } = await supabase
-        .from('meal_plan_details')
-        .select(`
-          date,
-          meal_type,
-          recipe_id,
-          recipe_name,
-          ingredients
-        `)
-        .in('date', dates);
-      // LOG temporal para depuración
-      console.log('mealPlanDetails desde Supabase:', mealPlanDetails);
+    const { data: mealPlanDetails, error: mealPlanDetailsError } = await supabase
+      .from('meal_plan_details')
+      .select(`
+        date,
+        meal_type,
+        recipe_id,
+        recipe_name,
+        ingredients
+      `)
+      .in('date', dates);
+      
 
       if (mealPlanDetailsError) throw mealPlanDetailsError;
 
@@ -263,8 +267,7 @@ existing.totalQuantity += ing.quantity;
         });
       });
 
-      console.log('ingredientMap agrupado:', Array.from(ingredientMap.values()));
-setIngredients(Array.from(ingredientMap.values()));
+      setIngredients(Array.from(ingredientMap.values()));
     } catch (error) {
       console.error('Error fetching weekly ingredients:', error);
       toast.error('Error al cargar la lista de compras');
@@ -330,7 +333,8 @@ setIngredients(Array.from(ingredientMap.values()));
         shopping_list_id: list.id,
         ingredient_id: item.ingredient.id,
         quantity: item.totalQuantity,
-        purchased: false
+        purchased: false,
+        recipes: item.recipes // <-- Guardar detalles de recetas y porciones
       }));
 
       const { error: itemsError } = await supabase
@@ -376,7 +380,8 @@ setIngredients(Array.from(ingredientMap.values()));
         quantity: item.quantity,
         custom_quantity: item.custom_quantity,
         custom_unit: item.custom_unit,
-        purchased: false
+        purchased: false,
+        recipes: item.recipes || [] // <-- Copia los detalles de recetas y porciones
       }));
 
       const { error: insertError } = await supabase
@@ -542,39 +547,52 @@ setIngredients(Array.from(ingredientMap.values()));
       </div>
 
       {showDatePicker && !selectedList && (
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha inicio
-              </label>
-              <input
-                type="date"
-                value={format(dateRange.start, 'yyyy-MM-dd')}
-                onChange={(e) => setDateRange({
-                  ...dateRange,
-                  start: parseISO(e.target.value)
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha fin
-              </label>
-              <input
-                type="date"
-                value={format(dateRange.end, 'yyyy-MM-dd')}
-                onChange={(e) => setDateRange({
-                  ...dateRange,
-                  end: parseISO(e.target.value)
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+  <div className="bg-white p-4 rounded-lg shadow-md">
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Fecha inicio
+        </label>
+        <input
+          type="date"
+          value={format(dateRange.start, 'yyyy-MM-dd')}
+          onChange={(e) => setDateRange({
+            ...dateRange,
+            start: parseISO(e.target.value)
+          })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Fecha fin
+        </label>
+        <input
+          type="date"
+          value={format(dateRange.end, 'yyyy-MM-dd')}
+          onChange={(e) => setDateRange({
+            ...dateRange,
+            end: parseISO(e.target.value)
+          })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+        />
+      </div>
+    </div>
+    {/* Botón Aceptar debajo de los inputs de fecha */}
+    <div className="flex justify-end mt-4">
+      <button
+        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+        onClick={() => {
+          setShowDatePicker(false);
+          setSelectedList(null);
+          fetchWeeklyIngredients();
+        }}
+      >
+        Aceptar
+      </button>
+    </div>
+  </div>
+)}
 
       <div className="flex space-x-4">
         <div className="w-64 space-y-4">
@@ -830,26 +848,29 @@ setIngredients(Array.from(ingredientMap.values()));
                               </div>
                             </div>
 
-                            {showRecipeInfo === item.ingredient.id && item.recipes.length > 0 && (
-                              <div className="mt-4 space-y-2">
-                                <h4 className="font-medium text-gray-700">Se utilizará en:</h4>
-                                {item.recipes.map((recipe, index) => {
-  // Ahora cada recipe en item.recipes tiene quantity y unit_name
-  const portions = recipe.porciones ?? recipe.portions;
-  return (
-    <div key={index} className="text-sm text-gray-600">
-      • {recipe.name} - {recipe.meal_type} ({format(parseISO(recipe.date), 'EEEE d', { locale: es })})
-      {typeof recipe.quantity !== 'undefined' && recipe.unit_name && (
-        <span className="ml-2 text-xs text-gray-500">{recipe.quantity} {recipe.unit_name}</span>
-      )}
-      {portions && (
-        <span className="ml-2 text-xs text-gray-400">en {portions} porciones</span>
-      )}
-    </div>
-  );
-})}
-                              </div>
-                            )}
+                            {showRecipeInfo === item.ingredient.id && (
+  <div className="mt-4 space-y-2">
+    <h4 className="font-medium text-gray-700">Se utilizará en:</h4>
+    {item.recipes.length > 0 ? (
+      item.recipes.map((recipe, index) => {
+        const portions = recipe.porciones ?? recipe.portions;
+        return (
+          <div key={index} className="text-sm text-gray-600">
+            • {recipe.name} - {recipe.meal_type} ({format(parseISO(recipe.date), 'EEEE d', { locale: es })})
+            {typeof recipe.quantity !== 'undefined' && recipe.unit_name && (
+              <span className="ml-2 text-xs text-gray-500">{recipe.quantity} {recipe.unit_name}</span>
+            )}
+            {portions && (
+              <span className="ml-2 text-xs text-gray-400">en {portions} porciones</span>
+            )}
+          </div>
+        );
+      })
+    ) : (
+      <div className="text-sm text-gray-500 italic">No hay detalles de recetas para este ingrediente en la lista guardada.</div>
+    )}
+  </div>
+)}
                           </div>
                         </div>
                       ))}
