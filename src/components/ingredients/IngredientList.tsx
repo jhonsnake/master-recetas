@@ -26,12 +26,16 @@ const SUGGESTED_TAGS = [
   'Bebida'
 ];
 
+import { IngredientDetails } from './IngredientDetails';
+
 export function IngredientList() {
   const { ingredients, setIngredients } = useStore();
   const [showForm, setShowForm] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showIngredientDetails, setShowIngredientDetails] = useState(false);
+  const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
 
   // Limpiar selectedTags si desaparecen de la lista dinámica
   useEffect(() => {
@@ -252,7 +256,11 @@ export function IngredientList() {
   {filteredIngredients.map((ingredient) => (
     <div
       key={ingredient.id}
-      className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-gray-200 flex flex-col items-center overflow-hidden group"
+      className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-gray-200 flex flex-col items-center overflow-hidden group cursor-pointer"
+      onClick={() => {
+        setSelectedIngredient(ingredient);
+        setShowIngredientDetails(true);
+      }}
     >
       <img
         src={getImageUrl(ingredient)}
@@ -319,20 +327,24 @@ export function IngredientList() {
         </div>
         <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-100">
           <button
-  onClick={() => {
-    setEditingIngredient(ingredient);
-    setShowForm(true);
-  }}
-  className="px-3 py-1 text-blue-700 hover:bg-blue-50 rounded font-semibold text-sm transition-colors"
->
-  Editar
-</button>
-<button
-  onClick={() => handleDelete(ingredient.id)}
-  className="px-3 py-1 text-red-700 hover:bg-red-50 rounded font-semibold text-sm transition-colors"
->
-  Eliminar
-</button>
+            onClick={e => {
+              e.stopPropagation();
+              setEditingIngredient(ingredient);
+              setShowForm(true);
+            }}
+            className="px-3 py-1 text-blue-700 hover:bg-blue-50 rounded font-semibold text-sm transition-colors"
+          >
+            Editar
+          </button>
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              handleDelete(ingredient.id);
+            }}
+            className="px-3 py-1 text-red-700 hover:bg-red-50 rounded font-semibold text-sm transition-colors"
+          >
+            Eliminar
+          </button>
         </div>
       </div>
     </div>
@@ -344,6 +356,16 @@ export function IngredientList() {
         <IngredientForm
           onClose={handleFormClose}
           editingIngredient={editingIngredient || undefined}
+        />
+      )}
+
+      {showIngredientDetails && selectedIngredient && (
+        <IngredientDetails
+          ingredient={selectedIngredient}
+          onClose={() => {
+            setShowIngredientDetails(false);
+            setSelectedIngredient(null);
+          }}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Tag } from 'lucide-react';
+import { X, Tag } from 'lucide-react';
 import type { RecipeWithIngredients } from '../../types';
 
 interface RecipeDetailsProps {
@@ -39,9 +39,10 @@ export function RecipeDetails({ recipe, onClose }: RecipeDetailsProps) {
           />
           <button
             onClick={onClose}
-            className="absolute top-4 left-4 bg-white p-2 rounded-full shadow-lg hover:bg-gray-100"
+            className="absolute top-4 right-4 bg-white p-2 rounded-full shadow-lg hover:bg-gray-100"
+            aria-label="Cerrar"
           >
-            <ArrowLeft className="w-6 h-6 text-gray-700" />
+            <X className="w-6 h-6 text-gray-700" />
           </button>
         </div>
 
@@ -160,6 +161,14 @@ export function RecipeDetails({ recipe, onClose }: RecipeDetailsProps) {
               ))}
             </div>
           </div>
+        </div>
+        <div className="flex justify-center mb-4">
+          <button
+            className="mt-6 mb-2 w-full max-w-xs py-2 px-4 bg-gray-800 text-white rounded-lg font-semibold hover:bg-gray-900 transition-colors"
+            onClick={onClose}
+          >
+            Cerrar
+          </button>
         </div>
       </div>
     </div>
