@@ -283,28 +283,27 @@ export function IngredientList() {
             </span>
           </div>
           <div className="my-3">
-            <div className="text-xs font-semibold text-gray-700 mb-1 tracking-wide">Por porción:</div>
-            <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600">
-                  <span className="inline-block min-w-[70px]">Calorías:</span>
-                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.calories}</span>
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
-                  <span className="inline-block min-w-[70px]">Proteínas:</span>
-                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.protein}g</span>
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700">
-                  <span className="inline-block min-w-[70px]">Grasas:</span>
-                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.fat}g</span>
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700">
-                  <span className="inline-block min-w-[70px]">Carbohidratos:</span>
-                  <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.carbs}g</span>
-                </span>
-              </div>
-            </div>
-          </div>
+  <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 flex flex-col gap-2">
+    <div className="flex flex-wrap gap-2">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600">
+        <span className="inline-block min-w-[70px]">Calorías:</span>
+        <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.calories}</span>
+      </span>
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
+        <span className="inline-block min-w-[70px]">Proteínas:</span>
+        <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.protein}g</span>
+      </span>
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700">
+        <span className="inline-block min-w-[70px]">Grasas:</span>
+        <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.fat}g</span>
+      </span>
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700">
+        <span className="inline-block min-w-[70px]">Carbohidratos:</span>
+        <span className="inline-block px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-900 text-sm font-semibold">{ingredient.carbs}g</span>
+      </span>
+    </div>
+  </div>
+</div>
           {ingredient.unit_equivalences && ingredient.unit_equivalences.length > 0 && (
             <div className="mb-4">
               <h4 className="text-sm font-medium text-gray-700 mb-1">Unidades de referencia:</h4>
