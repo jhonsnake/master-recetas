@@ -149,12 +149,13 @@ export function MealPlanner() {
         // Calcula los totales nutricionales
         let total_calories = 0, total_protein = 0, total_carbs = 0, total_fat = 0;
         for (const meal of meals) {
-          const porciones = meal.porciones || 1;
           const nutrition = meal.recipe?.live_total_nutrition || meal.recipe?.total_nutrition || {};
-          total_calories += (nutrition.calories || 0) * porciones;
-          total_protein += (nutrition.protein || 0) * porciones;
-          total_carbs += (nutrition.carbs || 0) * porciones;
-          total_fat += (nutrition.fat || 0) * porciones;
+          const recipePorciones = meal.recipe?.live_total_nutrition?.porciones || meal.recipe?.porciones || 1;
+          // Siempre sumar solo 1 porción (nutrientes por 1 porción)
+          total_calories += (nutrition.calories || 0) / recipePorciones;
+          total_protein += (nutrition.protein || 0) / recipePorciones;
+          total_carbs += (nutrition.carbs || 0) / recipePorciones;
+          total_fat += (nutrition.fat || 0) / recipePorciones;
         }
 
         return {
@@ -201,7 +202,7 @@ export function MealPlanner() {
       <div className="space-y-6">
         <div className="bg-gray-50 p-4 rounded-lg">
           <h4 className="text-sm font-medium text-gray-700 mb-2">
-            Distribución de macronutrientes
+            Distribución de macronutrientes <span className="text-xs text-gray-500">(por porción)</span>
           </h4>
           <div className="grid grid-cols-3 gap-4">
             {data.map(item => (
@@ -238,7 +239,7 @@ export function MealPlanner() {
               <Tooltip
                 formatter={(value: any, name: string) => {
                   const val = value != null ? value : 0;
-                  return [`${val}%`, name];
+                  return [`${val}% (por porción)`, name];
                 }}
                 contentStyle={{ backgroundColor: 'white', borderRadius: '0.5rem' }}
               />

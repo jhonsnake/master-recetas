@@ -239,7 +239,10 @@ export function ShoppingList() {
           const ingredient = ri.ingredients;
           if (!ingredient) return;
 
+          // Multiplica la cantidad base por el número de porciones de la receta en el plan
           let baseQuantity = ri.quantity;
+          const recipePortions = recipe.porciones || 1;
+          baseQuantity = baseQuantity * recipePortions;
           if (ri.unit_name !== ingredient.base_unit) {
             const conversion = ingredient.unit_equivalences?.find(
               ue => ue.unit_name === ri.unit_name
@@ -837,11 +840,31 @@ export function ShoppingList() {
                             {showRecipeInfo === item.ingredient.id && item.recipes.length > 0 && (
                               <div className="mt-4 space-y-2">
                                 <h4 className="font-medium text-gray-700">Se utilizará en:</h4>
-                                {item.recipes.map((recipe, index) => (
-                                  <div key={index} className="text-sm text-gray-600">
-                                    • {recipe.name} - {recipe.meal_type} ({format(new Date(recipe.date), 'EEEE d', { locale: es })})
-                                  </div>
-                                ))}
+                                {item.recipes.map((recipe, index) => {
+                                  // Buscar la cantidad y unidad específica de este ingrediente en la receta
+                                  let cantidad = null;
+                                  let unidad = null;
+                                  let porciones = recipe.porciones || 1;
+                                  if (recipe.recipe_ingredients && Array.isArray(recipe.recipe_ingredients)) {
+                                    // Buscar el ingrediente actual en la receta
+                                    const found = recipe.recipe_ingredients.find(ri => ri.ingredients?.id === item.ingredient.id);
+                                    if (found) {
+                                      cantidad = found.quantity * porciones;
+                                      unidad = found.unit_name;
+                                    }
+                                  }
+                                  return (
+                                    <div key={index} className="text-sm text-gray-600">
+                                      • {recipe.name} - {recipe.meal_type} ({format(new Date(recipe.date), 'EEEE d', { locale: es })})
+                                      {cantidad !== null && unidad && (
+                                        <span className="ml-2 text-xs text-gray-500">{cantidad} {unidad} ({porciones} porciones)</span>
+                                      )}
+                                      {((cantidad === null || !unidad) && typeof porciones !== 'undefined') && (
+                                        <span className="ml-2 text-xs text-gray-400">({porciones} porciones)</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
