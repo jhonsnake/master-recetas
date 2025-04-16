@@ -22,6 +22,12 @@ interface Recipe {
   name: string;
   date: string;
   meal_type: string;
+  image_url?: string;
+  instructions?: string;
+  porciones?: number;
+  total_nutrition?: any;
+  live_total_nutrition?: any;
+  ingredients?: any[];
 }
 
 interface Person {
@@ -33,16 +39,22 @@ interface Person {
   fat: number;
 }
 
+interface Meal {
+  meal_type: string;
+  porciones: number;
+  recipe: Recipe;
+}
+
 interface DailyPlan {
   date: string;
   total_calories: number;
   total_protein: number;
   total_carbs: number;
   total_fat: number;
-  calories_percentage: number;
-  protein_percentage: number;
-  carbs_percentage: number;
-  fat_percentage: number;
+  calories_percentage?: number;
+  protein_percentage?: number;
+  carbs_percentage?: number;
+  fat_percentage?: number;
   meals: Meal[];
 }
 
@@ -111,7 +123,7 @@ export function MealPlanner() {
       if (error) throw error;
 
       // Agrupa por fecha
-      const groupedByDate = {};
+      const groupedByDate: Record<string, any[]> = {};
       for (const row of data || []) {
         if (!groupedByDate[row.date]) groupedByDate[row.date] = [];
         groupedByDate[row.date].push(row);
@@ -121,7 +133,7 @@ export function MealPlanner() {
       const weeklyPlan = dates.map(date => {
         const meals = (groupedByDate[date] || []).map(row => ({
           meal_type: row.meal_type,
-          porciones: row.porciones,
+          porciones: row.porciones || 1,
           recipe: {
             id: row.recipe_id,
             name: row.recipe_name,
@@ -134,10 +146,24 @@ export function MealPlanner() {
           }
         }));
 
+        // Calcula los totales nutricionales
+        let total_calories = 0, total_protein = 0, total_carbs = 0, total_fat = 0;
+        for (const meal of meals) {
+          const porciones = meal.porciones || 1;
+          const nutrition = meal.recipe?.live_total_nutrition || meal.recipe?.total_nutrition || {};
+          total_calories += (nutrition.calories || 0) * porciones;
+          total_protein += (nutrition.protein || 0) * porciones;
+          total_carbs += (nutrition.carbs || 0) * porciones;
+          total_fat += (nutrition.fat || 0) * porciones;
+        }
+
         return {
           date,
           meals,
-          // Puedes agregar otros campos si lo deseas
+          total_calories,
+          total_protein,
+          total_carbs,
+          total_fat
         };
       });
 
@@ -148,30 +174,10 @@ export function MealPlanner() {
     }
   };
 
-  // Calcula los totales diarios considerando meal.porciones
+  // Obtiene el plan diario para una fecha específica
   const getDailyPlan = (date: Date): DailyPlan | undefined => {
-    const plan = weeklyPlan.find(plan =>
-      plan.date === format(date, 'yyyy-MM-dd')
-    );
-    if (!plan) return undefined;
-    // Sumar los totales considerando porciones
-    let total_calories = 0, total_protein = 0, total_carbs = 0, total_fat = 0;
-    const mealsArr = Array.isArray(plan.meals) ? plan.meals : [];
-    for (const meal of mealsArr) {
-      const porciones = meal.porciones || 1;
-      const n = meal.recipe?.live_total_nutrition || meal.recipe || {};
-      total_calories += (n.calories || 0) * porciones;
-      total_protein += (n.protein || 0) * porciones;
-      total_carbs += (n.carbs || 0) * porciones;
-      total_fat += (n.fat || 0) * porciones;
-    }
-    return {
-      ...plan,
-      total_calories,
-      total_protein,
-      total_carbs,
-      total_fat,
-    };
+    const formattedDate = format(date, 'yyyy-MM-dd');
+    return weeklyPlan.find(plan => plan.date === formattedDate);
   };
 
   const renderNutritionChart = (dailyPlan: DailyPlan) => {
@@ -386,9 +392,8 @@ export function MealPlanner() {
             return (
               <div
                 key={i}
-                className={`p-4 rounded-lg cursor-pointer transition-all ${
-                  isSelected ? 'bg-blue-50 border-2 border-blue-500' : 'bg-gray-50 hover:bg-gray-100'
-                }`}
+                className={`p-4 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-2 border-blue-500' : 'bg-gray-50 hover:bg-gray-100'
+                  }`}
                 onClick={() => {
                   setSelectedDate(date);
                   setShowDayModal(true);
@@ -404,33 +409,14 @@ export function MealPlanner() {
                 </div>
 
                 {dailyPlan && (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     {(Array.isArray(dailyPlan.meals) ? dailyPlan.meals : []).map((meal, index) => (
-                      <div key={index} className="text-sm">
-                        <div className="font-medium text-gray-700">
-                          {meal.meal_type}
-                        </div>
-                        <div className="text-gray-600 truncate">
-                          {meal.recipe.name}
-                          <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-900 rounded text-xs">{meal.porciones || 1} porciones</span>
-                        </div>
+                      <div key={index} className="text-base leading-relaxed">
+                        <div className="font-bold text-gray-800 mb-0.5">{meal.meal_type}</div>
+                        <div className="text-gray-600 mb-0.5">{meal.porciones || 1} {meal.porciones === 1 ? 'porción' : 'porciones'}</div>
+                        <div className="text-gray-900 whitespace-normal break-words">{meal.recipe.name}</div>
                       </div>
                     ))}
-                  </div>
-                )}
-
-                {dailyPlan && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="text-sm">
-                      <div className="flex justify-between text-gray-600">
-                        <span>Calorías:</span>
-                        <span>{Math.round(dailyPlan.total_calories)}</span>
-                      </div>
-                      <div className="flex justify-between text-gray-600">
-                        <span>Proteínas:</span>
-                        <span>{Math.round(dailyPlan.total_protein)}g</span>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -467,6 +453,7 @@ export function MealPlanner() {
             setShowDayModal(false);
             fetchWeeklyPlan();
           }}
+          onDataChanged={fetchWeeklyPlan}
         />
       )}
 

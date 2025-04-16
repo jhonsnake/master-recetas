@@ -136,7 +136,7 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
     }
 
     const loadedIngredients = recipeIngredients.map(ri => {
-  console.log('DEBUG ingredient:', ri.ingredients);
+      console.log('DEBUG ingredient:', ri.ingredients);
       const ingredient = ri.ingredients;
       const customUnits = ingredient.unit_equivalences?.map(ue => ({
         name: ue.unit_name,
@@ -194,7 +194,7 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
 
   useEffect(() => {
     if (searchTerm.trim()) {
-      const filtered = availableIngredients.filter(ing => 
+      const filtered = availableIngredients.filter(ing =>
         ing.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredIngredients(filtered);
@@ -207,7 +207,7 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
     const { data, error } = await supabase
       .from('ingredients')
       .select('*, unit_equivalences(*)');
-    
+
     if (error) {
       toast.error('Error al cargar los ingredientes');
       return;
@@ -321,15 +321,15 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
 
   const handleImageSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsSearching(true);
     try {
       const response = await fetch(`/api/search-images?query=${encodeURIComponent(searchQuery)}`);
       if (!response.ok) throw new Error('Error en la búsqueda de imágenes');
-      
+
       const images = await response.json();
       setSearchResults(images);
-      
+
       if (!imageUrl && images.length > 0) {
         setImageUrl(images[0]);
       }
@@ -505,11 +505,10 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
                   key={tag}
                   type="button"
                   onClick={() => handleTagToggle(tag)}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    formData.tags.includes(tag)
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${formData.tags.includes(tag)
                       ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   <Tag className="w-3 h-3" />
                   {tag}
@@ -697,9 +696,8 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
               <button
                 type="button"
                 onClick={() => setImageSource('upload')}
-                className={`flex items-center px-3 py-2 rounded-md ${
-                  imageSource === 'upload' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
-                }`}
+                className={`flex items-center px-3 py-2 rounded-md ${imageSource === 'upload' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
+                  }`}
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Subir
@@ -707,9 +705,8 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
               <button
                 type="button"
                 onClick={() => setImageSource('url')}
-                className={`flex items-center px-3 py-2 rounded-md ${
-                  imageSource === 'url' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
-                }`}
+                className={`flex items-center px-3 py-2 rounded-md ${imageSource === 'url' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
+                  }`}
               >
                 <LinkIcon className="w-4 h-4 mr-2" />
                 URL
@@ -717,9 +714,8 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
               <button
                 type="button"
                 onClick={() => setImageSource('search')}
-                className={`flex items-center px-3 py-2 rounded-md ${
-                  imageSource === 'search' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
-                }`}
+                className={`flex items-center px-3 py-2 rounded-md ${imageSource === 'search' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
+                  }`}
               >
                 <Search className="w-4 h-4 mr-2" />
                 Buscar
@@ -790,9 +786,8 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
                         key={index}
                         type="button"
                         onClick={() => setImageUrl(url)}
-                        className={`relative aspect-video overflow-hidden rounded-md transition-all ${
-                          url === imageUrl ? 'ring-2 ring-blue-500 ring-offset-2' : 'hover:ring-2 hover:ring-blue-300'
-                        }`}
+                        className={`relative aspect-video overflow-hidden rounded-md transition-all ${url === imageUrl ? 'ring-2 ring-blue-500 ring-offset-2' : 'hover:ring-2 hover:ring-blue-300'
+                          }`}
                       >
                         <img
                           src={url}
@@ -831,7 +826,7 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
             <button
               type="button"
               onClick={onClose}
-              
+
               className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
             >
               Cancelar

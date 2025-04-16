@@ -42,9 +42,10 @@ interface DayModalProps {
   mealTypes: MealType[];
   dailyPlan?: any;
   onClose: () => void;
+  onDataChanged?: () => void;
 }
 
-export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps) {
+export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }: DayModalProps) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMealType, setSelectedMealType] = useState<string | null>(null);
@@ -98,7 +99,8 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
       setPortionRecipe(null);
       setPortionMealType(null);
       setPortionCount(1);
-      onClose();
+      if (onDataChanged) onDataChanged();
+      // No cerrar el modal principal automáticamente, solo el de porciones.
     } catch (error) {
       console.error('Error adding meal:', error);
       toast.error('Error al agregar la comida');
@@ -115,6 +117,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
         .eq('recipe_id', recipeId);
       if (error) throw error;
       toast.success('Comida eliminada del plan');
+      if (onDataChanged) onDataChanged();
       onClose();
     } catch (error) {
       console.error('Error removing meal:', error);
@@ -240,21 +243,23 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
               })}
             </div>
           </div>
+        </div>
 
-          {selectedMealType && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Seleccionar Receta</h3>
-              <div className="mb-4 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Buscar recetas..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
-                />
-              </div>
+        {selectedMealType && (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Seleccionar Receta</h3>
+            <div className="mb-4 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Buscar recetas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
+              />
+            </div>
 
+            <>
               <div className="space-y-3 max-h-[60vh] overflow-y-auto">
                 {filteredRecipes.map((recipe) => (
                   <button
@@ -264,19 +269,37 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
                   >
                     <div className="flex gap-4">
                       <div className="w-24 h-24 flex-shrink-0">
-                        <img
-                          src={recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
-                          alt={recipe.name}
-                          className="w-full h-full object-cover rounded-md"
-                        />
+                        <div className="w-24 h-24 flex-shrink-0">
+                          <img
+                            src={recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
+                            alt={recipe.name}
+                            className="w-full h-full object-cover rounded-md"
+                          />
+                        </div>
                       </div>
                       <div className="flex-grow">
                         <h4 className="font-medium mb-2">{recipe.name}</h4>
                         <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
-                          <div>Calorías: {Math.round(recipe.live_total_nutrition?.calories ?? 0)}</div>
-                          <div>Proteínas: {Math.round(recipe.live_total_nutrition?.protein ?? 0)}g</div>
-                          <div>Carbohidratos: {Math.round(recipe.live_total_nutrition?.carbs ?? 0)}g</div>
-                          <div>Grasas: {Math.round(recipe.live_total_nutrition?.fat ?? 0)}g</div>
+                          <div>Calorías: {(() => {
+                            const cal = recipe.live_total_nutrition?.calories ?? 0;
+                            const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                            return Math.round(cal / porciones);
+                          })()} <span className="text-xs text-gray-500">por porción</span></div>
+                          <div>Proteínas: {(() => {
+                            const prot = recipe.live_total_nutrition?.protein ?? 0;
+                            const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                            return Math.round(prot / porciones);
+                          })()}g <span className="text-xs text-gray-500">por porción</span></div>
+                          <div>Carbohidratos: {(() => {
+                            const carbs = recipe.live_total_nutrition?.carbs ?? 0;
+                            const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                            return Math.round(carbs / porciones);
+                          })()}g <span className="text-xs text-gray-500">por porción</span></div>
+                          <div>Grasas: {(() => {
+                            const fat = recipe.live_total_nutrition?.fat ?? 0;
+                            const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                            return Math.round(fat / porciones);
+                          })()}g <span className="text-xs text-gray-500">por porción</span></div>
                         </div>
                       </div>
                     </div>
@@ -312,9 +335,100 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
                 >Agregar</button>
               </div>
             </div>
+            <input
+              type="text"
+              placeholder="Buscar recetas..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
+            />
           </div>
-        )}
-      </div>
+
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {filteredRecipes.map((recipe) => (
+              <button
+                key={recipe.id}
+                onClick={() => handleAddMeal(recipe, selectedMealType)}
+                className="w-full p-3 text-left border rounded-lg hover:bg-gray-50"
+              >
+                <div className="flex gap-4">
+                  <div className="w-24 h-24 flex-shrink-0">
+                    <div className="w-24 h-24 flex-shrink-0">
+                      <img
+                        src={recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
+                        alt={recipe.name}
+                        className="w-full h-full object-cover rounded-md"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-grow">
+                    <h4 className="font-medium mb-2">{recipe.name}</h4>
+                    <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
+                      <div>Calorías: {(() => {
+                        const cal = recipe.live_total_nutrition?.calories ?? 0;
+                        const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                        return Math.round(cal / porciones);
+                      })()} <span className="text-xs text-gray-500">por porción</span></div>
+                      <div>Proteínas: {(() => {
+                        const prot = recipe.live_total_nutrition?.protein ?? 0;
+                        const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                        return Math.round(prot / porciones);
+                      })()}g <span className="text-xs text-gray-500">por porción</span></div>
+                      <div>Carbohidratos: {(() => {
+                        const carbs = recipe.live_total_nutrition?.carbs ?? 0;
+                        const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                        return Math.round(carbs / porciones);
+                      })()}g <span className="text-xs text-gray-500">por porción</span></div>
+                      <div>Grasas: {(() => {
+                        const fat = recipe.live_total_nutrition?.fat ?? 0;
+                        const porciones = recipe.live_total_nutrition?.porciones || recipe.porciones || 1;
+                        return Math.round(fat / porciones);
+                      })()}g <span className="text-xs text-gray-500">por porción</span></div>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
-  );
-}
+
+    {showPortionModal && portionRecipe && (
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+          <h3 className="text-lg font-semibold mb-4">¿Cuántas porciones quieres agendar?</h3>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Porciones</label>
+            <input
+              type="number"
+              min={1}
+              value={portionCount}
+              onChange={e => setPortionCount(parseInt(e.target.value) || 1)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+              onClick={() => setShowPortionModal(false)}
+            >Cancelar</button>
+            <button
+              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+              onClick={confirmAddMeal}
+            >Agregar</button>
+          </div>
+        </div>
+      </div>
+    )}
+    {/* Botón de cierre destacado */}
+    <div className="flex justify-end mt-8">
+      <button
+        onClick={onClose}
+        className="px-6 py-3 rounded bg-blue-600 text-white font-semibold text-lg shadow hover:bg-blue-700 transition"
+      >
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
