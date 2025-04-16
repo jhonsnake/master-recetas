@@ -99,7 +99,7 @@ export function MealPlanner() {
   const fetchWeeklyPlan = async () => {
     try {
       const startDate = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const dates = Array.from({ length: 7 }, (_, i) => 
+      const dates = Array.from({ length: 7 }, (_, i) =>
         format(addDays(startDate, i), 'yyyy-MM-dd')
       );
 
@@ -109,17 +109,69 @@ export function MealPlanner() {
         .in('date', dates);
 
       if (error) throw error;
-      setWeeklyPlan(data || []);
+
+      // Agrupa por fecha
+      const groupedByDate = {};
+      for (const row of data || []) {
+        if (!groupedByDate[row.date]) groupedByDate[row.date] = [];
+        groupedByDate[row.date].push(row);
+      }
+
+      // Construye el array de DailyPlan
+      const weeklyPlan = dates.map(date => {
+        const meals = (groupedByDate[date] || []).map(row => ({
+          meal_type: row.meal_type,
+          porciones: row.porciones,
+          recipe: {
+            id: row.recipe_id,
+            name: row.recipe_name,
+            image_url: row.image_url,
+            instructions: row.instructions,
+            porciones: row.receta_porciones,
+            total_nutrition: row.total_nutrition,
+            live_total_nutrition: row.live_total_nutrition,
+            ingredients: row.ingredients
+          }
+        }));
+
+        return {
+          date,
+          meals,
+          // Puedes agregar otros campos si lo deseas
+        };
+      });
+
+      setWeeklyPlan(weeklyPlan);
     } catch (error) {
       console.error('Error fetching weekly plan:', error);
       toast.error('Error al cargar el plan semanal');
     }
   };
 
+  // Calcula los totales diarios considerando meal.porciones
   const getDailyPlan = (date: Date): DailyPlan | undefined => {
-    return weeklyPlan.find(plan => 
+    const plan = weeklyPlan.find(plan =>
       plan.date === format(date, 'yyyy-MM-dd')
     );
+    if (!plan) return undefined;
+    // Sumar los totales considerando porciones
+    let total_calories = 0, total_protein = 0, total_carbs = 0, total_fat = 0;
+    const mealsArr = Array.isArray(plan.meals) ? plan.meals : [];
+    for (const meal of mealsArr) {
+      const porciones = meal.porciones || 1;
+      const n = meal.recipe?.live_total_nutrition || meal.recipe || {};
+      total_calories += (n.calories || 0) * porciones;
+      total_protein += (n.protein || 0) * porciones;
+      total_carbs += (n.carbs || 0) * porciones;
+      total_fat += (n.fat || 0) * porciones;
+    }
+    return {
+      ...plan,
+      total_calories,
+      total_protein,
+      total_carbs,
+      total_fat,
+    };
   };
 
   const renderNutritionChart = (dailyPlan: DailyPlan) => {
@@ -353,13 +405,14 @@ export function MealPlanner() {
 
                 {dailyPlan && (
                   <div className="space-y-2">
-                    {dailyPlan.meals.map((meal, index) => (
+                    {(Array.isArray(dailyPlan.meals) ? dailyPlan.meals : []).map((meal, index) => (
                       <div key={index} className="text-sm">
                         <div className="font-medium text-gray-700">
                           {meal.meal_type}
                         </div>
                         <div className="text-gray-600 truncate">
                           {meal.recipe.name}
+                          <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-900 rounded text-xs">{meal.porciones || 1} porciones</span>
                         </div>
                       </div>
                     ))}

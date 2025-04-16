@@ -27,6 +27,7 @@ interface Recipe {
     protein?: number;
     carbs?: number;
     fat?: number;
+    porciones?: number;
   };
 }
 
@@ -49,6 +50,10 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
   const [selectedMealType, setSelectedMealType] = useState<string | null>(null);
   const [showIngredients, setShowIngredients] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [portionRecipe, setPortionRecipe] = useState<Recipe | null>(null);
+  const [portionMealType, setPortionMealType] = useState<string | null>(null);
+  const [portionCount, setPortionCount] = useState<number>(1);
+  const [showPortionModal, setShowPortionModal] = useState<boolean>(false);
 
   useEffect(() => {
     fetchRecipes();
@@ -59,7 +64,6 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
       const { data, error } = await supabase
         .from('recipe_with_live_nutrition')
         .select('*');
-
       if (error) throw error;
       setRecipes(data || []);
     } catch (error) {
@@ -70,18 +74,30 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
     }
   };
 
-  const handleAddMeal = async (recipe: Recipe, mealTypeId: string) => {
+  const handleAddMeal = (recipe: Recipe, mealTypeId: string) => {
+    setPortionRecipe(recipe);
+    setPortionMealType(mealTypeId);
+    setPortionCount(recipe.live_total_nutrition?.porciones || 1);
+    setShowPortionModal(true);
+  };
+
+  const confirmAddMeal = async () => {
+    if (!portionRecipe || !portionMealType) return;
     try {
       const { error } = await supabase
         .from('meal_plans')
         .insert({
           date: format(date, 'yyyy-MM-dd'),
-          meal_type_id: mealTypeId,
-          recipe_id: recipe.id
+          meal_type_id: portionMealType,
+          recipe_id: portionRecipe.id,
+          porciones: portionCount
         });
-
       if (error) throw error;
       toast.success('Comida agregada al plan');
+      setShowPortionModal(false);
+      setPortionRecipe(null);
+      setPortionMealType(null);
+      setPortionCount(1);
       onClose();
     } catch (error) {
       console.error('Error adding meal:', error);
@@ -97,7 +113,6 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
         .eq('date', format(date, 'yyyy-MM-dd'))
         .eq('meal_type_id', mealTypeId)
         .eq('recipe_id', recipeId);
-
       if (error) throw error;
       toast.success('Comida eliminada del plan');
       onClose();
@@ -112,9 +127,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
   );
 
   const getMealsByType = (mealType: MealType) => {
-    return dailyPlan?.meals.filter(
-      (m: any) => m.meal_type === mealType.name
-    ) || [];
+    return dailyPlan?.meals.filter((m: any) => m.meal_type === mealType.name) || [];
   };
 
   return (
@@ -124,10 +137,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
           <h2 className="text-xl font-bold">
             {format(date, "EEEE d 'de' MMMM", { locale: es })}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -141,12 +151,8 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
             <div className="space-y-4">
               {mealTypes.map((mealType) => {
                 const meals = getMealsByType(mealType);
-
                 return (
-                  <div
-                    key={mealType.id}
-                    className="p-4 bg-gray-50 rounded-lg"
-                  >
+                  <div key={mealType.id} className="p-4 bg-gray-50 rounded-lg">
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="font-medium">{mealType.name}</h4>
                       <button
@@ -160,59 +166,69 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
 
                     {meals.length > 0 && (
                       <div className="space-y-3">
-                        {meals.map((meal: any, index: number) => (
-                          <div key={index} className="bg-white p-3 rounded-md">
-                            <div className="flex gap-3">
-                              <div className="w-20 h-20 flex-shrink-0">
-                                <img
-                                  src={meal.recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
-                                  alt={meal.recipe.name}
-                                  className="w-full h-full object-cover rounded-md"
-                                />
+                        {meals.map((meal: any, idx: number) => (
+                          <div key={idx} className="bg-gray-100 rounded-lg p-3 flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-800 flex items-center gap-2">
+                                {meal.recipe.name}
+                                <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-900 rounded text-xs">
+                                  {meal.porciones || 1} porciones
+                                </span>
+                                <button
+                                  className="ml-2 text-gray-400 hover:text-blue-600"
+                                  title="Ver ingredientes"
+                                  onClick={() => setShowIngredients(meal.recipe.id)}
+                                >
+                                  <Info className="w-4 h-4" />
+                                </button>
                               </div>
-                              <div className="flex-grow">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <div className="font-medium">{meal.recipe.name}</div>
-                                    <div className="text-sm text-gray-600 grid grid-cols-2 gap-1 mt-1">
-                                      <div>Calorías: {typeof meal.recipe.live_total_nutrition?.calories === 'number' ? Math.round(meal.recipe.live_total_nutrition.calories) : 'N/A'}</div>
-                                      <div>Proteínas: {typeof meal.recipe.live_total_nutrition?.protein === 'number' ? Math.round(meal.recipe.live_total_nutrition.protein) : 'N/A'}g</div>
-                                      <div>Carbohidratos: {typeof meal.recipe.live_total_nutrition?.carbs === 'number' ? Math.round(meal.recipe.live_total_nutrition.carbs) : 'N/A'}g</div>
-                                      <div>Grasas: {typeof meal.recipe.live_total_nutrition?.fat === 'number' ? Math.round(meal.recipe.live_total_nutrition.fat) : 'N/A'}g</div>
+                              <div className="flex gap-3 mt-2">
+                                <div className="w-20 h-20 flex-shrink-0">
+                                  <img
+                                    src={meal.recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
+                                    alt={meal.recipe.name}
+                                    className="w-full h-full object-cover rounded-md"
+                                  />
+                                </div>
+                                <div className="flex-grow">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <div className="font-medium">{meal.recipe.name}</div>
+                                      <div className="text-sm text-gray-600 grid grid-cols-2 gap-1 mt-1">
+                                        <div>Calorías: {Math.round(meal.recipe.live_total_nutrition?.calories ?? 0)}</div>
+                                        <div>Proteínas: {Math.round(meal.recipe.live_total_nutrition?.protein ?? 0)}g</div>
+                                        <div>Carbohidratos: {Math.round(meal.recipe.live_total_nutrition?.carbs ?? 0)}g</div>
+                                        <div>Grasas: {Math.round(meal.recipe.live_total_nutrition?.fat ?? 0)}g</div>
+                                      </div>
+                                    </div>
+                                    <div className="flex space-x-2">
+                                      <button
+                                        onClick={() => setShowIngredients(showIngredients === meal.recipe.id ? null : meal.recipe.id)}
+                                        className="p-1 text-gray-400 hover:text-gray-600"
+                                      >
+                                        <Info className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleRemoveMeal(mealType.id, meal.recipe.id)}
+                                        className="p-1 text-red-600 hover:text-red-700"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
                                     </div>
                                   </div>
-                                  <div className="flex space-x-2">
-                                    <button
-                                      onClick={() =>
-                                        setShowIngredients(showIngredients === meal.recipe.id ? null : meal.recipe.id)
-                                      }
-                                      className="p-1 text-gray-400 hover:text-gray-600"
-                                    >
-                                      <Info className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleRemoveMeal(mealType.id, meal.recipe.id)}
-                                      className="p-1 text-red-600 hover:text-red-700"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                                  {showIngredients === meal.recipe.id && (
+                                    <div className="mt-3 pt-3 border-t border-gray-100">
+                                      <h5 className="text-sm font-medium text-gray-700 mb-2">Ingredientes:</h5>
+                                      <ul className="space-y-1">
+                                        {recipes.find(r => r.id === meal.recipe.id)?.ingredients?.map((ingredient, idx) => (
+                                          <li key={idx} className="text-sm text-gray-600">
+                                            • {ingredient.name}: {ingredient.conversion_text}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
                                 </div>
-
-                                {showIngredients === meal.recipe.id && (
-                                  <div className="mt-3 pt-3 border-t border-gray-100">
-                                    <h5 className="text-sm font-medium text-gray-700 mb-2">
-                                      Ingredientes:
-                                    </h5>
-                                    <ul className="space-y-1">
-                                      {recipes.find(r => r.id === meal.recipe.id)?.ingredients?.map((ingredient, idx) => (
-                                        <li key={idx} className="text-sm text-gray-600">
-                                          • {ingredient.name}: {ingredient.conversion_text}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -228,17 +244,15 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
           {selectedMealType && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Seleccionar Receta</h3>
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder="Buscar recetas..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
-                  />
-                </div>
+              <div className="mb-4 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Buscar recetas..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
+                />
               </div>
 
               <div className="space-y-3 max-h-[60vh] overflow-y-auto">
@@ -259,10 +273,10 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
                       <div className="flex-grow">
                         <h4 className="font-medium mb-2">{recipe.name}</h4>
                         <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
-                          <div>Calorías: {typeof recipe.live_total_nutrition?.calories === 'number' ? Math.round(recipe.live_total_nutrition.calories) : 'N/A'}</div>
-                          <div>Proteínas: {typeof recipe.live_total_nutrition?.protein === 'number' ? Math.round(recipe.live_total_nutrition.protein) : 'N/A'}g</div>
-                          <div>Carbohidratos: {typeof recipe.live_total_nutrition?.carbs === 'number' ? Math.round(recipe.live_total_nutrition.carbs) : 'N/A'}g</div>
-                          <div>Grasas: {typeof recipe.live_total_nutrition?.fat === 'number' ? Math.round(recipe.live_total_nutrition.fat) : 'N/A'}g</div>
+                          <div>Calorías: {Math.round(recipe.live_total_nutrition?.calories ?? 0)}</div>
+                          <div>Proteínas: {Math.round(recipe.live_total_nutrition?.protein ?? 0)}g</div>
+                          <div>Carbohidratos: {Math.round(recipe.live_total_nutrition?.carbs ?? 0)}g</div>
+                          <div>Grasas: {Math.round(recipe.live_total_nutrition?.fat ?? 0)}g</div>
                         </div>
                       </div>
                     </div>
@@ -272,6 +286,34 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose }: DayModalProps)
             </div>
           )}
         </div>
+
+        {showPortionModal && portionRecipe && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+              <h3 className="text-lg font-semibold mb-4">¿Cuántas porciones quieres agendar?</h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Porciones</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={portionCount}
+                  onChange={e => setPortionCount(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                  onClick={() => setShowPortionModal(false)}
+                >Cancelar</button>
+                <button
+                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={confirmAddMeal}
+                >Agregar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
