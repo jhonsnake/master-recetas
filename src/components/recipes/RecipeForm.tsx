@@ -22,10 +22,63 @@ interface RecipeIngredientInput {
 
 const AVAILABLE_TAGS = ['Desayuno', 'Almuerzo', 'Cena', 'Merienda', 'Snack'];
 
+function NutritionPreview({ ingredients, porciones }: { ingredients: any[]; porciones: number }) {
+  // Sumar los nutrientes de todos los ingredientes
+  const total = ingredients.reduce((acc, item) => {
+    const n = item.ingredient?.nutritional_values || item.ingredient || {};
+    return {
+      calories: acc.calories + (n.calories ? n.calories * (item.quantity || 0) : 0),
+      protein: acc.protein + (n.protein ? n.protein * (item.quantity || 0) : 0),
+      carbs: acc.carbs + (n.carbs ? n.carbs * (item.quantity || 0) : 0),
+      fat: acc.fat + (n.fat ? n.fat * (item.quantity || 0) : 0),
+      fiber: acc.fiber + (n.fiber ? n.fiber * (item.quantity || 0) : 0),
+      sugar: acc.sugar + (n.sugar ? n.sugar * (item.quantity || 0) : 0),
+    };
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 });
+
+  const perServing = {
+    calories: porciones ? total.calories / porciones : 0,
+    protein: porciones ? total.protein / porciones : 0,
+    carbs: porciones ? total.carbs / porciones : 0,
+    fat: porciones ? total.fat / porciones : 0,
+    fiber: porciones ? total.fiber / porciones : 0,
+    sugar: porciones ? total.sugar / porciones : 0,
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="bg-blue-50 p-4 rounded-lg">
+        <h3 className="text-lg font-semibold text-blue-900 mb-2">Información Nutricional Total</h3>
+        <div className="space-y-2">
+          <div className="flex justify-between"><span className="text-blue-700">Calorías</span><span className="font-medium">{Math.round(total.calories)} kcal</span></div>
+          <div className="flex justify-between"><span className="text-blue-700">Proteínas</span><span className="font-medium">{Math.round(total.protein)}g</span></div>
+          <div className="flex justify-between"><span className="text-blue-700">Carbohidratos</span><span className="font-medium">{Math.round(total.carbs)}g</span></div>
+          <div className="flex justify-between"><span className="text-blue-700">Grasas</span><span className="font-medium">{Math.round(total.fat)}g</span></div>
+          <div className="flex justify-between"><span className="text-blue-700">Fibra</span><span className="font-medium">{Math.round(total.fiber)}g</span></div>
+          <div className="flex justify-between"><span className="text-blue-700">Azúcares</span><span className="font-medium">{Math.round(total.sugar)}g</span></div>
+        </div>
+      </div>
+      <div className="bg-green-50 p-4 rounded-lg">
+        <h3 className="text-lg font-semibold text-green-900 mb-2">Valores por porción</h3>
+        <div className="space-y-2">
+          <div className="flex justify-between"><span className="text-green-700">Calorías</span><span className="font-medium">{Math.round(perServing.calories)} kcal</span></div>
+          <div className="flex justify-between"><span className="text-green-700">Proteínas</span><span className="font-medium">{Math.round(perServing.protein)}g</span></div>
+          <div className="flex justify-between"><span className="text-green-700">Carbohidratos</span><span className="font-medium">{Math.round(perServing.carbs)}g</span></div>
+          <div className="flex justify-between"><span className="text-green-700">Grasas</span><span className="font-medium">{Math.round(perServing.fat)}g</span></div>
+          <div className="flex justify-between"><span className="text-green-700">Fibra</span><span className="font-medium">{Math.round(perServing.fiber)}g</span></div>
+          <div className="flex justify-between"><span className="text-green-700">Azúcares</span><span className="font-medium">{Math.round(perServing.sugar)}g</span></div>
+        </div>
+        <div className="text-xs text-gray-500 mt-2">* Calculado para {porciones} porciones</div>
+      </div>
+    </div>
+  );
+}
+
 export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
   const [formData, setFormData] = useState({
     name: editingRecipe?.name || '',
     description: editingRecipe?.description || '',
+    porciones: editingRecipe?.porciones || editingRecipe?.servings || 1,
     instructions: editingRecipe?.instructions || [''],
     tags: editingRecipe?.tags || []
   });
@@ -317,11 +370,13 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
 
       const recipeData = {
         ...formData,
+        porciones: formData.porciones || 1,
         image_url: finalImageUrl || PLACEHOLDER_IMAGE,
         user_id: null,
         instructions: formData.instructions.filter(i => i.trim()),
         total_nutrition,
       };
+
 
       let recipe;
       if (editingRecipe) {
@@ -441,6 +496,24 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
               ))}
             </div>
           </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Porciones
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={formData.porciones}
+              onChange={e => setFormData({ ...formData, porciones: parseInt(e.target.value) || 1 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+
+          {/* Preview nutricional en tiempo real */}
+          <NutritionPreview ingredients={ingredients} porciones={formData.porciones} />
 
           <div className="space-y-4">
             <div className="flex justify-between items-center">

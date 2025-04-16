@@ -8,6 +8,26 @@ interface RecipeDetailsProps {
 }
 
 export function RecipeDetails({ recipe, onClose }: RecipeDetailsProps) {
+  // TEMP: Depuración solo cuando cambia la receta
+  React.useEffect(() => {
+    console.log('[RecipeDetails] recipe:', recipe);
+  }, [recipe]);
+
+  // Porciones: preferir recipe.porciones, luego recipe.servings, si no existe ninguno mostrar 1
+  const servings = recipe.porciones ?? recipe.servings ?? 1;
+
+  // Cálculo de valores por porción
+  const nutrition = recipe.total_nutrition || {};
+  const nutritionPerServing = {
+    calories: nutrition.calories ? nutrition.calories / servings : 0,
+    protein: nutrition.protein ? nutrition.protein / servings : 0,
+    carbs: nutrition.carbs ? nutrition.carbs / servings : 0,
+    fat: nutrition.fat ? nutrition.fat / servings : 0,
+    fiber: nutrition.fiber ? nutrition.fiber / servings : 0,
+    sugar: nutrition.sugar ? nutrition.sugar / servings : 0,
+  };
+
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -52,24 +72,65 @@ export function RecipeDetails({ recipe, onClose }: RecipeDetailsProps) {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-blue-700">Calorías</span>
-                  <span className="font-medium">{Math.round(recipe.total_nutrition.calories)} kcal</span>
+                  <span className="font-medium">{Math.round(nutrition.calories || 0)} kcal</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-700">Proteínas</span>
-                  <span className="font-medium">{Math.round(recipe.total_nutrition.protein)}g</span>
+                  <span className="font-medium">{Math.round(nutrition.protein || 0)}g</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-700">Carbohidratos</span>
-                  <span className="font-medium">{Math.round(recipe.total_nutrition.carbs)}g</span>
+                  <span className="font-medium">{Math.round(nutrition.carbs || 0)}g</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-700">Grasas</span>
-                  <span className="font-medium">{Math.round(recipe.total_nutrition.fat)}g</span>
+                  <span className="font-medium">{Math.round(nutrition.fat || 0)}g</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-700">Fibra</span>
+                  <span className="font-medium">{Math.round(nutrition.fiber || 0)}g</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-700">Azúcares</span>
+                  <span className="font-medium">{Math.round(nutrition.sugar || 0)}g</span>
                 </div>
               </div>
             </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold text-green-900 mb-2">Valores por porción</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-green-700">Calorías</span>
+                  <span className="font-medium">{Math.round(nutritionPerServing.calories)} kcal</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Proteínas</span>
+                  <span className="font-medium">{Math.round(nutritionPerServing.protein)}g</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Carbohidratos</span>
+                  <span className="font-medium">{Math.round(nutritionPerServing.carbs)}g</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Grasas</span>
+                  <span className="font-medium">{Math.round(nutritionPerServing.fat)}g</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Fibra</span>
+                  <span className="font-medium">{Math.round(nutritionPerServing.fiber)}g</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-green-700">Azúcares</span>
+                  <span className="font-medium">{Math.round(nutritionPerServing.sugar)}g</span>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mt-2">* Calculado para {servings} porciones</div>
+            </div>
           </div>
 
+          <div className="mb-2">
+            <div className="text-md text-gray-700 mb-2 font-medium">Rinde: {servings} porciones</div>
+          </div>
           <div className="mb-8">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">Ingredientes</h3>
             <div className="bg-gray-50 rounded-lg p-4">

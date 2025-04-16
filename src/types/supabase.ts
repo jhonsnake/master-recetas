@@ -129,6 +129,7 @@ export interface Database {
           instructions: string[]
           user_id: string | null
           created_at: string
+          porciones: number | null
         }
         Insert: {
           id?: string
@@ -138,6 +139,7 @@ export interface Database {
           instructions?: string[]
           user_id?: string | null
           created_at?: string
+          porciones?: number | null
         }
         Update: {
           id?: string
@@ -147,6 +149,7 @@ export interface Database {
           instructions?: string[]
           user_id?: string | null
           created_at?: string
+          porciones?: number | null
         }
       }
       recipe_ingredients: {
