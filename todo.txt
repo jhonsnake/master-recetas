@@ -1,0 +1,3 @@
+TODO
+- Siempre hay un dia de la semana seleccionado, la idea es seleccionar otros sin entrar en el modal a menos que el usuario seleccione Añadir comida o ver/Editar
+- Mejorar la version movil del planificador 
