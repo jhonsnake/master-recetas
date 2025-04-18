@@ -136,7 +136,7 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
     }
 
     const loadedIngredients = recipeIngredients.map(ri => {
-      console.log('DEBUG ingredient:', ri.ingredients);
+
       const ingredient = ri.ingredients;
       const customUnits = ingredient.unit_equivalences?.map(ue => ({
         name: ue.unit_name,
@@ -369,14 +369,14 @@ export function RecipeForm({ onClose, editingRecipe }: RecipeFormProps) {
           const nv = ing.ingredient;
           const cantidadEnBase = ing.quantity * factor;
           const proporcion = cantidadEnBase / ing.ingredient.base_quantity;
-          console.log('[NUTRICION] Ingrediente:', nv.name);
-          console.log('  - Cantidad:', ing.quantity, ing.unit_name);
-          console.log('  - Factor conversión:', factor);
-          console.log('  - Cantidad en base:', cantidadEnBase, nv.base_unit);
-          console.log('  - Base quantity:', nv.base_quantity, nv.base_unit);
-          console.log('  - Proporción:', proporcion);
-          console.log('  - Valores base: Cal:', nv.calories, 'Prot:', nv.protein, 'Carb:', nv.carbs, 'Fat:', nv.fat, 'Fiber:', nv.fiber, 'Sugar:', nv.sugar);
-          console.log('  - Parcial: Cal:', (nv.calories || 0) * proporcion, 'Prot:', (nv.protein || 0) * proporcion, 'Carb:', (nv.carbs || 0) * proporcion, 'Fat:', (nv.fat || 0) * proporcion, 'Fiber:', (nv.fiber || 0) * proporcion, 'Sugar:', (nv.sugar || 0) * proporcion);
+
+
+
+
+
+
+
+
           return {
             calories: totals.calories + (nv.calories || 0) * proporcion,
             protein: totals.protein + (nv.protein || 0) * proporcion,

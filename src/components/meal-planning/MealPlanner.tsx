@@ -56,13 +56,13 @@ export function MealPlanner() {
 
   useEffect(() => {
     if (mealTypes.length > 0 && persons.length > 0) {
-      console.log('Calling fetchWeeklyPlan with persons:', persons, 'and mealTypes:', mealTypes);
+
       fetchWeeklyPlan();
     }
   }, [currentDate, mealTypes, persons]);
 
   const fetchInitialData = async () => {
-    console.log("Fetching initial data (meal types, persons)...");
+
     setIsLoading(true);
     try {
       const [mealTypesResponse, personsResponse] = await Promise.all([
@@ -73,22 +73,22 @@ export function MealPlanner() {
       if (mealTypesResponse.error) throw mealTypesResponse.error;
       if (personsResponse.error) throw personsResponse.error;
 
-      console.log("Meal types fetched:", mealTypesResponse.data);
-      console.log("Persons fetched:", personsResponse.data);
+
+
 
       setMealTypes(mealTypesResponse.data || []);
       setPersons(personsResponse.data || []);
       if ((personsResponse.data?.length ?? 0) > 0) {
         setActivePersonIndex(0); // Default to first person
       } else {
-         console.log("No persons found, planner might be limited.");
+
       }
     } catch (error) {
       console.error('Error fetching initial data:', error);
       toast.error('Error al cargar los datos iniciales');
     } finally {
       setIsLoading(false);
-      console.log("Initial data fetch finished.");
+
     }
   };
 
@@ -119,7 +119,7 @@ export function MealPlanner() {
 
       if (data) {
         (data as MealPlanDetailRow[]).forEach(row => {
-          console.log('Meal row:', row.date, row.meal_type_name, row.recipe_name, row);
+
         });
       }
 
@@ -137,7 +137,7 @@ export function MealPlanner() {
           .filter(row => {
             const match = row.date === dateStr;
             if (match) {
-              console.log('Assigning meal to date:', dateStr, 'meal:', row);
+
             }
             return match;
           })
@@ -209,7 +209,7 @@ export function MealPlanner() {
         });
       });
 
-      console.log("Processed weekly plan:", newWeeklyPlan);
+
       setWeeklyPlan(newWeeklyPlan);
 
     } catch (error) {
@@ -226,19 +226,19 @@ export function MealPlanner() {
   };
 
   const handleDayClick = (date: Date) => {
-    console.log("Day clicked:", format(date, 'yyyy-MM-dd'));
+
     setSelectedDayDate(date);
   };
 
   const closeDayModal = () => {
-    console.log("Closing day modal.");
+
     setSelectedDayDate(null);
     // No automatic refetch here, rely on onDataChanged from modal
     // fetchWeeklyPlan(); // Removed: Let DayModal trigger refetch via onDataChanged
   };
 
   const handleDataChanged = () => {
-    console.log("Data changed (likely from DayModal), refetching weekly plan.");
+
     fetchWeeklyPlan(); // Refetch data when modal signals changes
   }
 
@@ -549,7 +549,7 @@ export function MealPlanner() {
         <MealTypeManager
           mealTypes={mealTypes}
           onClose={() => {
-            console.log("Closing MealTypeManager, refetching initial data.");
+
             setShowMealTypeManager(false);
             fetchInitialData(); // Refetch meal types and potentially persons
           }}

@@ -6,6 +6,8 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import RecipeSelector from './RecipeSelector'; // Corrected: Use default import
 import PortionModal from './PortionModal';
+import { RecipeDetails } from '../recipes/RecipeDetails';
+import type { RecipeWithIngredients } from '../../types';
 import type { MealType, Recipe, DailyPlan, Meal } from '../../types';
 
 interface DayModalProps {
@@ -30,6 +32,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
   const [mealsByTypeId, setMealsByTypeId] = useState<Record<string, Meal[]>>({});
   const [showRecipeSelector, setShowRecipeSelector] = useState<string | null>(null); // meal_type_id
   const [showIngredients, setShowIngredients] = useState<string | null>(null); // recipe.id
+const [selectedRecipeDetails, setSelectedRecipeDetails] = useState<RecipeWithIngredients | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showPortionModal, setShowPortionModal] = useState(false);
@@ -47,8 +50,8 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
     const fetchRecipes = async () => {
       setIsLoading(true);
       const { data, error } = await supabase
-        .from('recipe_with_live_nutrition') // Use the view with live nutrition
-        .select('id, name, image_url, porciones, live_total_nutrition') // Select necessary fields including live nutrition
+        .from('recipe_with_ingredients') // Usa la vista
+        .select('id, name, description, image_url, instructions, user_id, created_at, ingredients, total_nutrition')
         .order('name', { ascending: true });
 
       if (error) {
@@ -56,25 +59,13 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
         toast.error('Error al cargar recetas.');
       } else {
         // Map data to Recipe type, ensuring live_total_nutrition is included
-        const recipesData = data.map(r => ({
-          id: r.id,
-          name: r.name,
-          image_url: r.image_url,
-          porciones: r.porciones, // Base portions from recipe table
-          live_total_nutrition: r.live_total_nutrition ? { // Map the JSONB object
-            calories: r.live_total_nutrition.calories,
-            protein: r.live_total_nutrition.protein,
-            carbs: r.live_total_nutrition.carbs,
-            fat: r.live_total_nutrition.fat,
-            porciones: r.live_total_nutrition.porciones, // Include porciones from view if available
-          } : undefined,
-        })) as Recipe[]; // Assert type
+        const recipesData = data as RecipeWithIngredients[];
         setAllRecipes(recipesData);
-        console.log("Fetched all recipes:", recipesData);
+
         // Debug: Print nutrition for each recipe
-        console.log("Recipe nutrition details:");
+
         recipesData.forEach(r => {
-          console.log(r.name, r.live_total_nutrition);
+
         });
       }
       setIsLoading(false);
@@ -85,47 +76,53 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
 
   // Initialize state from dailyPlan prop
   useEffect(() => {
-    console.log("DayModal useEffect: Initializing meals from dailyPlan", dailyPlan);
     const initialMeals: Record<string, Meal[]> = {};
-    mealTypes.forEach(mt => initialMeals[mt.id] = []); // Initialize all meal types
+    mealTypes.forEach(mt => initialMeals[mt.id] = []);
 
     if (dailyPlan?.meals) {
+      console.log('DEBUG dailyPlan.meals:', dailyPlan.meals);
       dailyPlan.meals.forEach(meal => {
-        if (!initialMeals[meal.meal_type_id]) {
-          initialMeals[meal.meal_type_id] = []; // Ensure array exists
+        // Asignar meal_type_id usando meal_type_name si no existe
+        let mealTypeId = meal.meal_type_id;
+        if (!mealTypeId && meal.meal_type_name) {
+          const foundType = mealTypes.find(mt => mt.name === meal.meal_type_name);
+          mealTypeId = foundType ? foundType.id : undefined;
         }
-        // Ensure recipe exists before pushing
+        if (!mealTypeId) return; // Si no hay id válido, no pushear
+        if (!initialMeals[mealTypeId]) {
+          initialMeals[mealTypeId] = [];
+        }
         if (meal.recipe) {
-           // Patch: Merge live_total_nutrition or total_nutrition from meal into recipe if present
-           let patchedRecipe = meal.recipe;
-           if (meal.live_total_nutrition) {
-             patchedRecipe = {
-               ...meal.recipe,
-               live_total_nutrition: meal.live_total_nutrition
-             };
-           } else if (meal.total_nutrition) {
-             patchedRecipe = {
-               ...meal.recipe,
-               live_total_nutrition: meal.total_nutrition // fallback
-             };
-           }
-           initialMeals[meal.meal_type_id].push({
-             ...meal,
-             // Ensure porciones has a default value if undefined/null
-             porciones: meal.porciones ?? 1,
-             recipe: patchedRecipe
-           });
+          initialMeals[mealTypeId].push({ ...meal, meal_type_id: mealTypeId });
         } else {
-           console.warn(`Meal associated with type ID ${meal.meal_type_id} is missing recipe data. Skipping.`);
+          initialMeals[mealTypeId].push({
+            ...meal,
+            meal_type_id: mealTypeId,
+            porciones: meal.porciones ?? 1,
+            recipe: {
+              id: meal.recipe_id,
+              name: meal.recipe_name,
+              image_url: meal.image_url ?? null,
+              porciones: meal.porciones ?? 1,
+              total_nutrition: meal.live_total_nutrition ?? meal.total_nutrition ?? undefined,
+            }
+          });
         }
       });
     }
     setMealsByTypeId(initialMeals);
+    // DEBUG: mostrar el contenido de mealsByTypeId después de inicializarlo
+    setTimeout(() => {
+      // @ts-ignore
+      window._debugMealsByTypeId = initialMeals;
+      console.log('DEBUG mealsByTypeId:', initialMeals);
+    }, 100);
+
   }, [dailyPlan, mealTypes]); // Rerun if dailyPlan or mealTypes change
 
 
   const handleAddRecipe = (recipe: Recipe, mealTypeId: string) => {
-    console.log(`Adding recipe ${recipe.name} to meal type ${mealTypeId}`);
+
     setMealsByTypeId(prev => {
       const currentMeals = prev[mealTypeId] || [];
       // Check if recipe already exists for this meal type
@@ -148,7 +145,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
   };
 
   const handleRemoveMeal = (mealTypeId: string, recipeId: string) => {
-     console.log(`Removing recipe ${recipeId} from meal type ${mealTypeId}`);
+
     setMealsByTypeId(prev => ({
       ...prev,
       [mealTypeId]: (prev[mealTypeId] || []).filter(meal => meal.recipe.id !== recipeId)
@@ -158,7 +155,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
   const openPortionEditor = (mealTypeId: string, recipeId: string) => {
     const meal = mealsByTypeId[mealTypeId]?.find(m => m.recipe.id === recipeId);
     if (meal && meal.recipe) { // Ensure meal and meal.recipe exist
-      console.log(`Opening portion editor for recipe ${meal.recipe.name}`);
+
       const currentPortions = meal.porciones ?? 1;
       // Use live_total_nutrition.porciones if available, otherwise recipe.porciones, default to 1
       const basePortions = meal.recipe.live_total_nutrition?.porciones ?? meal.recipe.porciones ?? 1;
@@ -179,7 +176,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
 
  const handleConfirmSavePortions = () => {
     if (!mealToEditPortions) return;
-    console.log(`Saving ${currentPortionCount} portions for recipe ${mealToEditPortions.recipeId} in meal type ${mealToEditPortions.mealTypeId}`);
+
     setMealsByTypeId(prev => {
       const updatedMeals = (prev[mealToEditPortions.mealTypeId] || []).map(meal =>
         meal.recipe.id === mealToEditPortions.recipeId ? { ...meal, porciones: currentPortionCount } : meal
@@ -198,8 +195,8 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    console.log("Saving changes for date:", formattedDate);
-    console.log("Current state to save:", mealsByTypeId);
+
+
 
     // Flatten the meals from the state
     const mealsToSave: { meal_type_id: string; recipe_id: string; porciones: number }[] = [];
@@ -219,11 +216,11 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
     });
 
 
-    console.log("Flattened meals to save:", mealsToSave);
+
 
     try {
       // 1. Delete existing meal plan entries for this date
-      console.log(`Deleting existing entries for ${formattedDate}...`);
+
       const { error: deleteError } = await supabase
         .from('meal_plans')
         .delete()
@@ -233,12 +230,12 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
         console.error("Error deleting existing meal plans:", deleteError);
         throw new Error(`Error deleting existing plans: ${deleteError.message}`);
       }
-      console.log(`Existing entries deleted for ${formattedDate}.`);
+
 
 
       // 2. Insert new meal plan entries if there are any
       if (mealsToSave.length > 0) {
-         console.log(`Inserting ${mealsToSave.length} new entries for ${formattedDate}...`);
+
         const recordsToInsert = mealsToSave.map(meal => ({
           date: formattedDate,
           meal_type_id: meal.meal_type_id,
@@ -246,7 +243,7 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
           porciones: meal.porciones
         }));
 
-        console.log("Records to insert:", recordsToInsert);
+
 
 
         const { error: insertError } = await supabase
@@ -258,9 +255,9 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
           // Attempt to rollback or notify user? For now, just throw.
           throw new Error(`Error inserting new plans: ${insertError.message}`);
         }
-         console.log(`Successfully inserted ${mealsToSave.length} entries for ${formattedDate}.`);
+
       } else {
-         console.log(`No meals to insert for ${formattedDate}.`);
+
       }
 
 
@@ -330,29 +327,13 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
                        if (!meal.recipe) return null; // Skip rendering if recipe data is missing
 
                        // Debug: log the meal.recipe object before calculating nutrition
-                       console.log('[DayModal] meal.recipe before nutrition calc:', meal.recipe);
+
                        // Calculate nutrition for the planned portions using live data
                        const portionNutrition = calculateLiveNutritionPerPortion(meal.recipe, meal.porciones ?? 1);
                        // Determine base portions for display (live preferred, fallback to recipe, then 1)
                        const displayBasePortions = meal.recipe.live_total_nutrition?.porciones ?? meal.recipe.porciones ?? 1;
 
                        // Debug logs for nutrition calculation
-                       const plannedPortions = meal.porciones ?? 1;
-                       const nutrition = meal.recipe.live_total_nutrition;
-                       const basePortions = nutrition?.porciones ?? 1;
-                       const factor = basePortions > 0 ? plannedPortions / basePortions : 0;
-                       console.log('[DayModal] Nutrition calculation:', {
-                         mealName: meal.recipe.name,
-                         calories: nutrition?.calories,
-                         protein: nutrition?.protein,
-                         carbs: nutrition?.carbs,
-                         fat: nutrition?.fat,
-                         basePortions,
-                         plannedPortions,
-                         factor,
-                         portionNutrition
-                       });
-
                        return (
                         <div key={meal.recipe.id} className="bg-white border rounded-md p-3 shadow-sm">
                           <div className="flex justify-between items-start">
@@ -366,9 +347,13 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
                                 <Edit2 className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => setShowIngredients(showIngredients === meal.recipe.id ? null : meal.recipe.id)}
+                                onClick={() => {
+    // Buscar el objeto completo en allRecipes si existe
+    const found = allRecipes.find(r => r.id === meal.recipe.id);
+    setSelectedRecipeDetails(found || meal.recipe);
+  }}
                                 className="p-1 text-gray-400 hover:text-gray-600"
-                                title="Ver ingredientes y nutrición"
+                                title="Ver detalles de la receta"
                               >
                                 <Info className="w-4 h-4" />
                               </button>
@@ -511,6 +496,21 @@ export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }:
           onConfirm={handleConfirmSavePortions}
         />
       )}
-    </div>
+    {/* Modal de detalles de receta */}
+    {selectedRecipeDetails && (
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-lg relative">
+          <button
+            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+            onClick={() => setSelectedRecipeDetails(null)}
+            title="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <RecipeDetails recipe={selectedRecipeDetails} onClose={() => setSelectedRecipeDetails(null)} />
+        </div>
+      </div>
+    )}
+  </div>
   );
 }

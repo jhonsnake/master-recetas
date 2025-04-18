@@ -10,9 +10,11 @@ interface RecipeDetailsProps {
 export function RecipeDetails({ recipe, onClose }: RecipeDetailsProps) {
   // TEMP: Depuración solo cuando cambia la receta
   React.useEffect(() => {
-    console.log('[RecipeDetails] recipe:', recipe);
+
   }, [recipe]);
 
+  // DEBUG: Ver el objeto recipe recibido
+  console.log('DEBUG recipe en detalles:', recipe);
   // Porciones: preferir recipe.porciones, luego recipe.servings, si no existe ninguno mostrar 1
   const servings = recipe.porciones ?? recipe.servings ?? 1;
 
@@ -140,7 +142,8 @@ export function RecipeDetails({ recipe, onClose }: RecipeDetailsProps) {
                   <li key={index} className="flex items-center">
                     <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                     <span>
-                      {ingredient.conversion_text}
+                      {ingredient.name ? `${ingredient.quantity} ${ingredient.unit_name} ${ingredient.name}` : ''}
+{ingredient.conversion_text && ingredient.conversion_text !== `${ingredient.quantity} ${ingredient.unit_name}` ? ` (${ingredient.conversion_text})` : ''}
                     </span>
                   </li>
                 ))}

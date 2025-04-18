@@ -37,7 +37,7 @@ export async function insertNewUser(
   }
 
   if (data && data.length > 0) {
-      console.log('New user inserted:', data);
+
       return { success: true };
   } else {
       return { success: false, error: "No data returned after inserting user" };

@@ -67,7 +67,7 @@ async function main() {
     if (updateError) {
       console.error('Error actualizando receta', recipe.id, updateError);
     } else {
-      console.log('Receta actualizada:', recipe.id, total_nutrition);
+
     }
   }
   console.log('¡Migración completada!');
