@@ -1,3 +1,25 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Add any global custom styles here */
+body {
+  @apply antialiased font-sans text-gray-800;
+}
+
+/* Example: Custom scrollbar styling (optional) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

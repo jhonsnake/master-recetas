@@ -1,287 +1,516 @@
-// 💡 Solo cópialo y pégalo, está corregido y completo
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, Plus, Trash2, Info, Save, Edit2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
-import RecipeSelector from './RecipeSelector';
+import RecipeSelector from './RecipeSelector'; // Corrected: Use default import
 import PortionModal from './PortionModal';
-import MealList from './MealList';
-import { X, Plus, Info, Trash2 } from 'lucide-react';
-
-interface Recipe {
-  id: string;
-  name: string;
-  image_url: string;
-  total_calories: number;
-  total_protein: number;
-  total_carbs: number;
-  total_fat: number;
-  porciones?: number;
-  ingredients?: {
-    id: string;
-    name: string;
-    quantity: number;
-    unit_name: string;
-    base_unit: string;
-    conversion_factor: number;
-    conversion_text: string;
-  }[];
-  live_total_nutrition?: {
-    calories?: number;
-    protein?: number;
-    carbs?: number;
-    fat?: number;
-    porciones?: number;
-  };
-}
-
-interface MealType {
-  id: string;
-  name: string;
-  order: number;
-}
+import type { MealType, Recipe, DailyPlan, Meal } from '../../types';
 
 interface DayModalProps {
   date: Date;
   mealTypes: MealType[];
-  dailyPlan?: any;
+  dailyPlan: DailyPlan | undefined; // Can be undefined if no plan exists yet
   onClose: () => void;
-  onDataChanged?: () => void;
+  onDataChanged: () => void; // Callback to notify parent about changes
 }
 
+// Define a type for the meal being edited for portions
+interface MealBeingEdited {
+  mealTypeId: string;
+  recipeId: string;
+  currentPortions: number;
+  recipeName: string;
+  recipeBasePortions: number;
+}
+
+
 export function DayModal({ date, mealTypes, dailyPlan, onClose, onDataChanged }: DayModalProps) {
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMealType, setSelectedMealType] = useState<string | null>(null);
-  const [showIngredients, setShowIngredients] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [portionRecipe, setPortionRecipe] = useState<Recipe | null>(null);
-  const [portionMealType, setPortionMealType] = useState<string | null>(null);
-  const [portionCount, setPortionCount] = useState<number>(1);
-  const [showPortionModal, setShowPortionModal] = useState<boolean>(false);
+  const [mealsByTypeId, setMealsByTypeId] = useState<Record<string, Meal[]>>({});
+  const [showRecipeSelector, setShowRecipeSelector] = useState<string | null>(null); // meal_type_id
+  const [showIngredients, setShowIngredients] = useState<string | null>(null); // recipe.id
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showPortionModal, setShowPortionModal] = useState(false);
+  const [mealToEditPortions, setMealToEditPortions] = useState<MealBeingEdited | null>(null);
+  const [currentPortionCount, setCurrentPortionCount] = useState(1); // State for PortionModal input
+  const [searchTerm, setSearchTerm] = useState(''); // State for RecipeSelector search
+  const [allRecipes, setAllRecipes] = useState<Recipe[]>([]); // State to hold all fetched recipes
 
+
+  const formattedDate = format(date, 'yyyy-MM-dd');
+  const displayDate = format(date, 'EEEE, d \'de\' MMMM', { locale: es });
+
+  // Fetch all recipes once when the modal mounts
   useEffect(() => {
-    fetchRecipes();
-  }, []);
-
-  const fetchRecipes = async () => {
-    try {
+    const fetchRecipes = async () => {
+      setIsLoading(true);
       const { data, error } = await supabase
-        .from('recipe_with_live_nutrition')
-        .select('*');
-      if (error) throw error;
-      setRecipes(data || []);
-    } catch (error) {
-      console.error('Error fetching recipes:', error);
-      toast.error('Error al cargar las recetas');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        .from('recipe_with_live_nutrition') // Use the view with live nutrition
+        .select('id, name, image_url, porciones, live_total_nutrition') // Select necessary fields including live nutrition
+        .order('name', { ascending: true });
 
-  const handleAddMeal = (recipe: Recipe, mealTypeId: string) => {
-    setPortionRecipe(recipe);
-    setPortionMealType(mealTypeId);
-    setPortionCount(recipe.live_total_nutrition?.porciones || recipe.porciones || 1);
-    setShowPortionModal(true);
-  };
-
-  const confirmAddMeal = async () => {
-    if (!portionRecipe || !portionMealType) return;
-    try {
-      const { error } = await supabase
-        .from('meal_plans')
-        .insert({
-          date: format(date, 'yyyy-MM-dd'),
-          meal_type_id: portionMealType,
-          recipe_id: portionRecipe.id,
-          porciones: portionCount
+      if (error) {
+        console.error('Error fetching recipes:', error);
+        toast.error('Error al cargar recetas.');
+      } else {
+        // Map data to Recipe type, ensuring live_total_nutrition is included
+        const recipesData = data.map(r => ({
+          id: r.id,
+          name: r.name,
+          image_url: r.image_url,
+          porciones: r.porciones, // Base portions from recipe table
+          live_total_nutrition: r.live_total_nutrition ? { // Map the JSONB object
+            calories: r.live_total_nutrition.calories,
+            protein: r.live_total_nutrition.protein,
+            carbs: r.live_total_nutrition.carbs,
+            fat: r.live_total_nutrition.fat,
+            porciones: r.live_total_nutrition.porciones, // Include porciones from view if available
+          } : undefined,
+        })) as Recipe[]; // Assert type
+        setAllRecipes(recipesData);
+        console.log("Fetched all recipes:", recipesData);
+        // Debug: Print nutrition for each recipe
+        console.log("Recipe nutrition details:");
+        recipesData.forEach(r => {
+          console.log(r.name, r.live_total_nutrition);
         });
-      if (error) throw error;
-      toast.success('Comida agregada al plan');
-      setShowPortionModal(false);
-      setPortionRecipe(null);
-      setPortionMealType(null);
-      setPortionCount(1);
-      if (onDataChanged) onDataChanged();
-    } catch (error) {
-      console.error('Error adding meal:', error);
-      toast.error('Error al agregar la comida');
+      }
+      setIsLoading(false);
+    };
+    fetchRecipes();
+  }, []); // Empty dependency array ensures this runs only once
+
+
+  // Initialize state from dailyPlan prop
+  useEffect(() => {
+    console.log("DayModal useEffect: Initializing meals from dailyPlan", dailyPlan);
+    const initialMeals: Record<string, Meal[]> = {};
+    mealTypes.forEach(mt => initialMeals[mt.id] = []); // Initialize all meal types
+
+    if (dailyPlan?.meals) {
+      dailyPlan.meals.forEach(meal => {
+        if (!initialMeals[meal.meal_type_id]) {
+          initialMeals[meal.meal_type_id] = []; // Ensure array exists
+        }
+        // Ensure recipe exists before pushing
+        if (meal.recipe) {
+           // Patch: Merge live_total_nutrition or total_nutrition from meal into recipe if present
+           let patchedRecipe = meal.recipe;
+           if (meal.live_total_nutrition) {
+             patchedRecipe = {
+               ...meal.recipe,
+               live_total_nutrition: meal.live_total_nutrition
+             };
+           } else if (meal.total_nutrition) {
+             patchedRecipe = {
+               ...meal.recipe,
+               live_total_nutrition: meal.total_nutrition // fallback
+             };
+           }
+           initialMeals[meal.meal_type_id].push({
+             ...meal,
+             // Ensure porciones has a default value if undefined/null
+             porciones: meal.porciones ?? 1,
+             recipe: patchedRecipe
+           });
+        } else {
+           console.warn(`Meal associated with type ID ${meal.meal_type_id} is missing recipe data. Skipping.`);
+        }
+      });
+    }
+    setMealsByTypeId(initialMeals);
+  }, [dailyPlan, mealTypes]); // Rerun if dailyPlan or mealTypes change
+
+
+  const handleAddRecipe = (recipe: Recipe, mealTypeId: string) => {
+    console.log(`Adding recipe ${recipe.name} to meal type ${mealTypeId}`);
+    setMealsByTypeId(prev => {
+      const currentMeals = prev[mealTypeId] || [];
+      // Check if recipe already exists for this meal type
+      if (currentMeals.some(m => m.recipe.id === recipe.id)) {
+        toast.error(`${recipe.name} ya está añadido a este tipo de comida.`);
+        return prev;
+      }
+      const newMeal: Meal = {
+        meal_type_id: mealTypeId,
+        porciones: 1, // Default to 1 portion when adding
+        recipe: recipe,
+      };
+      return {
+        ...prev,
+        [mealTypeId]: [...currentMeals, newMeal]
+      };
+    });
+    setShowRecipeSelector(null); // Close selector
+    setSearchTerm(''); // Reset search term
+  };
+
+  const handleRemoveMeal = (mealTypeId: string, recipeId: string) => {
+     console.log(`Removing recipe ${recipeId} from meal type ${mealTypeId}`);
+    setMealsByTypeId(prev => ({
+      ...prev,
+      [mealTypeId]: (prev[mealTypeId] || []).filter(meal => meal.recipe.id !== recipeId)
+    }));
+  };
+
+  const openPortionEditor = (mealTypeId: string, recipeId: string) => {
+    const meal = mealsByTypeId[mealTypeId]?.find(m => m.recipe.id === recipeId);
+    if (meal && meal.recipe) { // Ensure meal and meal.recipe exist
+      console.log(`Opening portion editor for recipe ${meal.recipe.name}`);
+      const currentPortions = meal.porciones ?? 1;
+      // Use live_total_nutrition.porciones if available, otherwise recipe.porciones, default to 1
+      const basePortions = meal.recipe.live_total_nutrition?.porciones ?? meal.recipe.porciones ?? 1;
+      setMealToEditPortions({
+        mealTypeId: mealTypeId,
+        recipeId: recipeId,
+        currentPortions: currentPortions,
+        recipeName: meal.recipe.name,
+        recipeBasePortions: basePortions // Pass correct base portions
+      });
+      setCurrentPortionCount(currentPortions); // Initialize modal input value
+      setShowPortionModal(true);
+    } else {
+       console.error(`Could not find meal or meal recipe with recipeId ${recipeId} in mealTypeId ${mealTypeId} to edit portions.`);
     }
   };
 
-  const handleRemoveMeal = async (mealTypeId: string, recipeId: string) => {
+
+ const handleConfirmSavePortions = () => {
+    if (!mealToEditPortions) return;
+    console.log(`Saving ${currentPortionCount} portions for recipe ${mealToEditPortions.recipeId} in meal type ${mealToEditPortions.mealTypeId}`);
+    setMealsByTypeId(prev => {
+      const updatedMeals = (prev[mealToEditPortions.mealTypeId] || []).map(meal =>
+        meal.recipe.id === mealToEditPortions.recipeId ? { ...meal, porciones: currentPortionCount } : meal
+      );
+      return { ...prev, [mealToEditPortions.mealTypeId]: updatedMeals };
+    });
+    setShowPortionModal(false); // Close modal after saving
+    setMealToEditPortions(null);
+  };
+
+  const handleCancelPortionEdit = () => {
+    setShowPortionModal(false);
+    setMealToEditPortions(null);
+  }
+
+
+  const handleSaveChanges = async () => {
+    setIsSaving(true);
+    console.log("Saving changes for date:", formattedDate);
+    console.log("Current state to save:", mealsByTypeId);
+
+    // Flatten the meals from the state
+    const mealsToSave: { meal_type_id: string; recipe_id: string; porciones: number }[] = [];
+    Object.entries(mealsByTypeId).forEach(([mealTypeId, meals]) => {
+      meals.forEach(meal => {
+        // Ensure meal.recipe exists before trying to access its id
+        if (meal.recipe) {
+          mealsToSave.push({
+            meal_type_id: mealTypeId,
+            recipe_id: meal.recipe.id,
+            porciones: meal.porciones ?? 1 // Ensure porciones is always a number
+          });
+        } else {
+          console.warn(`Skipping meal in type ${mealTypeId} because recipe data is missing.`);
+        }
+      });
+    });
+
+
+    console.log("Flattened meals to save:", mealsToSave);
+
     try {
-      const { error } = await supabase
+      // 1. Delete existing meal plan entries for this date
+      console.log(`Deleting existing entries for ${formattedDate}...`);
+      const { error: deleteError } = await supabase
         .from('meal_plans')
         .delete()
-        .eq('date', format(date, 'yyyy-MM-dd'))
-        .eq('meal_type_id', mealTypeId)
-        .eq('recipe_id', recipeId);
-      if (error) throw error;
-      toast.success('Comida eliminada del plan');
-      if (onDataChanged) onDataChanged();
-    } catch (error) {
-      console.error('Error removing meal:', error);
-      toast.error('Error al eliminar la comida');
+        .eq('date', formattedDate);
+
+      if (deleteError) {
+        console.error("Error deleting existing meal plans:", deleteError);
+        throw new Error(`Error deleting existing plans: ${deleteError.message}`);
+      }
+      console.log(`Existing entries deleted for ${formattedDate}.`);
+
+
+      // 2. Insert new meal plan entries if there are any
+      if (mealsToSave.length > 0) {
+         console.log(`Inserting ${mealsToSave.length} new entries for ${formattedDate}...`);
+        const recordsToInsert = mealsToSave.map(meal => ({
+          date: formattedDate,
+          meal_type_id: meal.meal_type_id,
+          recipe_id: meal.recipe_id,
+          porciones: meal.porciones
+        }));
+
+        console.log("Records to insert:", recordsToInsert);
+
+
+        const { error: insertError } = await supabase
+          .from('meal_plans')
+          .insert(recordsToInsert);
+
+        if (insertError) {
+          console.error("Error inserting new meal plans:", insertError);
+          // Attempt to rollback or notify user? For now, just throw.
+          throw new Error(`Error inserting new plans: ${insertError.message}`);
+        }
+         console.log(`Successfully inserted ${mealsToSave.length} entries for ${formattedDate}.`);
+      } else {
+         console.log(`No meals to insert for ${formattedDate}.`);
+      }
+
+
+      toast.success('Plan del día guardado con éxito!');
+      onDataChanged(); // Notify parent that data has changed
+      onClose(); // Close modal on success
+    } catch (error: any) {
+      console.error('Error saving meal plan:', error);
+      toast.error(`Error al guardar: ${error.message || 'Error desconocido'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const filteredRecipes = recipes.filter(recipe =>
-    recipe.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
-  const getMealsByType = (mealType: MealType) => {
-    return dailyPlan?.meals.filter((m: any) => m.meal_type === mealType.name) || [];
+  // Helper to calculate nutrition per portion based on LIVE or fallback nutrition data
+  const calculateLiveNutritionPerPortion = (recipe: Recipe | undefined, plannedPortions: number) => {
+    // Accept either live_total_nutrition or total_nutrition
+    const nutrition = recipe?.live_total_nutrition || recipe?.total_nutrition;
+    if (!nutrition) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+
+    // Use the porciones from the nutrition object if available, otherwise default to 1
+    const basePortions = nutrition.porciones ?? 1;
+    const factor = basePortions > 0 ? (plannedPortions / basePortions) : 0;
+
+    return {
+      calories: Math.round((Number(nutrition.calories) || 0) * factor),
+      protein: Math.round((Number(nutrition.protein) || 0) * factor),
+      carbs: Math.round((Number(nutrition.carbs) || 0) * factor),
+      fat: Math.round((Number(nutrition.fat) || 0) * factor),
+    };
   };
 
+  // Filter recipes based on search term and exclude already added ones for the selected meal type
+  const getFilteredRecipes = (mealTypeId: string | null) => {
+    if (!mealTypeId) return [];
+    const existingRecipeIds = mealsByTypeId[mealTypeId]?.map(m => m.recipe.id) || [];
+    return allRecipes.filter(recipe =>
+      recipe.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !existingRecipeIds.includes(recipe.id)
+    );
+  };
+
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold">
-            {format(date, "EEEE d 'de' MMMM", { locale: es })}
-          </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center p-4 border-b">
+          <h2 className="text-xl font-semibold text-gray-800">{displayDate}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Grid para categorías y selector uno al lado del otro */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Bloque de categorías */}
-          <div className="space-y-8">
-            {mealTypes.map((mealType) => {
-              const meals = getMealsByType(mealType);
-              return (
-                <div key={mealType.id} className="bg-gray-50 rounded-lg p-4 shadow-sm">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-semibold text-lg text-gray-800">{mealType.name}</h4>
-                    <button
-                      onClick={() => setSelectedMealType(mealType.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm font-medium transition"
-                    >
-                      <Plus className="w-4 h-4" /> Agregar
-                    </button>
-                  </div>
-                  {meals.length === 0 && (
-                    <div className="text-gray-400 text-sm italic">Sin comidas agendadas</div>
-                  )}
-                  <div className="flex flex-col gap-4 mt-2">
-                    {meals.map((meal: any) => (
-                      <div key={meal.id + '-' + meal.recipe.id} className="bg-white rounded-lg shadow p-4 flex flex-col gap-2">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={meal.recipe.image_url || 'https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800'}
-                            alt={meal.recipe.name}
-                            className="w-20 h-20 object-cover rounded-md border"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-800">{meal.recipe.name}</span>
-                              <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-900 rounded text-xs whitespace-nowrap">{meal.porciones === 1 || meal.porciones === undefined ? '1 porción' : `${meal.porciones} porciones`}</span>
-                            </div>
-                            <div className="text-xs text-gray-500 grid grid-cols-2 gap-1 mt-1">
-                              <div>Calorías: {(() => {
-                                const total = meal.recipe.live_total_nutrition?.calories ?? 0;
-                                const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
-                                const selected = meal.porciones || 1;
-                                return Math.round((total / porciones) * selected);
-                              })()}</div>
-                              <div>Proteínas: {(() => {
-                                const total = meal.recipe.live_total_nutrition?.protein ?? 0;
-                                const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
-                                const selected = meal.porciones || 1;
-                                return Math.round((total / porciones) * selected);
-                              })()}g</div>
-                              <div>Carbohidratos: {(() => {
-                                const total = meal.recipe.live_total_nutrition?.carbs ?? 0;
-                                const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
-                                const selected = meal.porciones || 1;
-                                return Math.round((total / porciones) * selected);
-                              })()}g</div>
-                              <div>Grasas: {(() => {
-                                const total = meal.recipe.live_total_nutrition?.fat ?? 0;
-                                const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
-                                const selected = meal.porciones || 1;
-                                return Math.round((total / porciones) * selected);
-                              })()}g</div>
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-2 ml-2">
-                            <button
-                              onClick={() => setShowIngredients(showIngredients === meal.recipe.id ? null : meal.recipe.id)}
-                              className="p-1 text-gray-400 hover:text-gray-600"
-                              title="Ver ingredientes"
-                            >
-                              <Info className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveMeal(mealType.id, meal.recipe.id)}
-                              className="p-1 text-red-600 hover:text-red-700"
-                              title="Eliminar comida"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        {showIngredients === meal.recipe.id && (
-                          <div className="mt-2 pt-2 border-t border-gray-100">
-                            <h5 className="text-sm font-medium text-gray-700 mb-2">Ingredientes:</h5>
-                            <ul className="space-y-1">
-                              {recipes.find(r => r.id === meal.recipe.id)?.ingredients?.map((ingredient, idx) => (
-                                <li key={idx} className="text-sm text-gray-600">
-                                  • {ingredient.name}: {ingredient.conversion_text}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Content */}
+        <div className="p-4 sm:p-6 flex-grow overflow-y-auto">
+          {isLoading && !showRecipeSelector ? ( // Show loading only if not showing recipe selector
+            <p>Cargando...</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {mealTypes.map(mealType => (
+                <div key={mealType.id} className="bg-gray-50 rounded-lg p-4 border">
+                  <h3 className="font-semibold text-gray-700 mb-3">{mealType.name}</h3>
+                  <div className="space-y-3 mb-3 min-h-[60px]">
+                    {(mealsByTypeId[mealType.id] || []).map((meal) => {
+                       if (!meal.recipe) return null; // Skip rendering if recipe data is missing
 
-          {/* Bloque de selección de recetas */}
-          <div>
-            {selectedMealType && (
-              <RecipeSelector
-                filteredRecipes={filteredRecipes}
-                searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
-                selectedMealType={selectedMealType}
-                handleAddMeal={handleAddMeal}
-                mealTypeName={mealTypes.find(mt => mt.id === selectedMealType)?.name || ''}
-              />
-            )}
-          </div>
+                       // Debug: log the meal.recipe object before calculating nutrition
+                       console.log('[DayModal] meal.recipe before nutrition calc:', meal.recipe);
+                       // Calculate nutrition for the planned portions using live data
+                       const portionNutrition = calculateLiveNutritionPerPortion(meal.recipe, meal.porciones ?? 1);
+                       // Determine base portions for display (live preferred, fallback to recipe, then 1)
+                       const displayBasePortions = meal.recipe.live_total_nutrition?.porciones ?? meal.recipe.porciones ?? 1;
+
+                       // Debug logs for nutrition calculation
+                       const plannedPortions = meal.porciones ?? 1;
+                       const nutrition = meal.recipe.live_total_nutrition;
+                       const basePortions = nutrition?.porciones ?? 1;
+                       const factor = basePortions > 0 ? plannedPortions / basePortions : 0;
+                       console.log('[DayModal] Nutrition calculation:', {
+                         mealName: meal.recipe.name,
+                         calories: nutrition?.calories,
+                         protein: nutrition?.protein,
+                         carbs: nutrition?.carbs,
+                         fat: nutrition?.fat,
+                         basePortions,
+                         plannedPortions,
+                         factor,
+                         portionNutrition
+                       });
+
+                       return (
+                        <div key={meal.recipe.id} className="bg-white border rounded-md p-3 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <span className="font-medium text-sm text-gray-900 flex-1 mr-2">{meal.recipe.name}</span>
+                            <div className="flex items-center space-x-1 flex-shrink-0">
+                               <button
+                                onClick={() => openPortionEditor(mealType.id, meal.recipe.id)}
+                                className="p-1 text-blue-500 hover:text-blue-700"
+                                title={`Editar porciones (${meal.porciones ?? 1})`}
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setShowIngredients(showIngredients === meal.recipe.id ? null : meal.recipe.id)}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title="Ver ingredientes y nutrición"
+                              >
+                                <Info className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveMeal(mealType.id, meal.recipe.id)}
+                                className="p-1 text-red-400 hover:text-red-600"
+                                title="Eliminar comida"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                           {/* Display calculated nutrition per portion */}
+                           <div className="text-xs text-gray-500 mt-1">
+                             {meal.porciones ?? 1} porción(es): {portionNutrition.calories}kcal, {portionNutrition.protein}g P, {portionNutrition.carbs}g C, {portionNutrition.fat}g F
+                           </div>
+
+                          {showIngredients === meal.recipe.id && (
+                            <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-gray-700 border border-blue-100">
+                              <p className="font-medium mb-1">Ingredientes ({meal.porciones ?? 1} porción/es):</p>
+                              {meal.recipe.ingredients && meal.recipe.ingredients.length > 0 ? (
+                                <ul className="list-disc list-inside space-y-0.5">
+                                  {(meal.recipe.ingredients as any[]).map((ing: any, index: number) => {
+                                     // Adjust quantity based on planned portions vs recipe base portions
+                                     const baseRecipePortions = displayBasePortions; // Use the determined base portions
+                                     const plannedPortions = meal.porciones ?? 1;
+                                     const quantityFactor = baseRecipePortions > 0 ? plannedPortions / baseRecipePortions : 0;
+                                     const adjustedQuantity = (ing.quantity || 0) * quantityFactor;
+                                     // Simple rounding for display
+                                     const displayQuantity = adjustedQuantity % 1 === 0 ? adjustedQuantity : adjustedQuantity.toFixed(1);
+
+                                     return (
+                                        <li key={`${ing.id}-${index}`}>
+                                          {ing.name}: {displayQuantity} {ing.unit_name} {ing.conversion_text ? `(${ing.conversion_text})` : ''}
+                                        </li>
+                                     );
+                                  })}
+                                </ul>
+                              ) : (
+                                <p>No hay ingredientes detallados.</p>
+                              )}
+                               <p className="font-medium mt-2 mb-1">Nutrición Total (Receta Base: {displayBasePortions} porción/es):</p>
+                               <p>Cal: {meal.recipe.live_total_nutrition?.calories ?? 0}, Prot: {meal.recipe.live_total_nutrition?.protein ?? 0}g, Carb: {meal.recipe.live_total_nutrition?.carbs ?? 0}g, Grasa: {meal.recipe.live_total_nutrition?.fat ?? 0}g</p>
+                            </div>
+                          )}
+                        </div>
+                       );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => { setSearchTerm(''); setShowRecipeSelector(mealType.id); }} // Reset search on open
+                    className="w-full flex items-center justify-center px-3 py-1.5 border border-dashed border-gray-400 text-gray-600 rounded-md hover:bg-gray-100 hover:border-gray-500 transition-colors text-sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Añadir Receta
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-
-        {showPortionModal && portionRecipe && (
-          <PortionModal
-            portionRecipe={portionRecipe}
-            portionCount={portionCount}
-            setPortionCount={setPortionCount}
-            onCancel={() => setShowPortionModal(false)}
-            onConfirm={confirmAddMeal}
-          />
-        )}
-
-
-        <div className="flex justify-end mt-8">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 rounded bg-blue-600 text-white font-semibold text-lg shadow hover:bg-blue-700 transition"
-          >
-            Cerrar
-          </button>
+        {/* Footer */}
+        <div className="flex justify-end items-center p-4 border-t space-x-3">
+           {/* Conditionally render Cancel or Close based on whether RecipeSelector is open */}
+           {showRecipeSelector ? (
+             <button
+               onClick={() => { setShowRecipeSelector(null); setSearchTerm(''); }} // Close selector and reset search
+               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+             >
+               Cerrar Selección
+             </button>
+           ) : (
+             <button
+               onClick={onClose}
+               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+               disabled={isSaving}
+             >
+               Cancelar
+             </button>
+           )}
+          {/* Hide Save Changes button when RecipeSelector is open */}
+          {!showRecipeSelector && (
+            <button
+              onClick={handleSaveChanges}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center text-sm disabled:opacity-50"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Guardar Cambios
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Recipe Selector Overlay/Modal */}
+      {showRecipeSelector && (
+         <div className="absolute inset-0 bg-white z-60 flex flex-col"> {/* Use absolute positioning within the modal */}
+           <div className="p-4 sm:p-6 flex-grow overflow-y-auto">
+             <RecipeSelector
+               filteredRecipes={getFilteredRecipes(showRecipeSelector)}
+               searchTerm={searchTerm}
+               setSearchTerm={setSearchTerm}
+               selectedMealType={showRecipeSelector}
+               handleAddMeal={handleAddRecipe}
+               mealTypeName={mealTypes.find(mt => mt.id === showRecipeSelector)?.name}
+             />
+           </div>
+           <div className="flex justify-end p-4 border-t">
+              <button
+                onClick={() => { setShowRecipeSelector(null); setSearchTerm(''); }} // Close selector and reset search
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+              >
+                Cerrar Selección
+              </button>
+           </div>
+         </div>
+      )}
+
+
+       {/* Portion Editor Modal */}
+      {showPortionModal && mealToEditPortions && (
+        <PortionModal
+          portionRecipe={mealToEditPortions} // Pass the whole object or specific props as needed
+          portionCount={currentPortionCount}
+          setPortionCount={setCurrentPortionCount}
+          onCancel={handleCancelPortionEdit}
+          onConfirm={handleConfirmSavePortions}
+        />
+      )}
     </div>
   );
 }

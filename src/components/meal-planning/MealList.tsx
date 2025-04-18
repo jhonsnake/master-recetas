@@ -47,24 +47,53 @@ const MealList: React.FC<MealListProps> = ({
               const total = meal.recipe.live_total_nutrition?.calories ?? 0;
               const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
               const selected = meal.porciones || 1;
-              return Math.round((total / porciones) * selected);
+              console.log('[MealList] Calorías calculation:', {
+                mealName: meal.recipe.name,
+                total,
+                porciones,
+                selected
+              });
+              const result = total === null || total === undefined ? 'Desconocido' : Math.round((total / porciones) * selected);
+              console.log('[MealList] Calorías result:', result);
+              return result;
             })()}</div>
             <div>Proteínas: {(() => {
               const total = meal.recipe.live_total_nutrition?.protein ?? 0;
               const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
               const selected = meal.porciones || 1;
+              console.log('[MealList] Proteínas calculation:', {
+                mealName: meal.recipe.name,
+                total,
+                porciones,
+                selected
+              });
+              if (total === null || total === undefined) return 'Desconocido';
               return Math.round((total / porciones) * selected);
             })()}g</div>
             <div>Carbohidratos: {(() => {
               const total = meal.recipe.live_total_nutrition?.carbs ?? 0;
               const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
               const selected = meal.porciones || 1;
+              console.log('[MealList] Carbs calculation:', {
+                mealName: meal.recipe.name,
+                total,
+                porciones,
+                selected
+              });
+              if (total === null || total === undefined) return 'Desconocido';
               return Math.round((total / porciones) * selected);
             })()}g</div>
             <div>Grasas: {(() => {
               const total = meal.recipe.live_total_nutrition?.fat ?? 0;
               const porciones = meal.recipe.live_total_nutrition?.porciones || meal.recipe.porciones || 1;
               const selected = meal.porciones || 1;
+              console.log('[MealList] Grasas calculation:', {
+                mealName: meal.recipe.name,
+                total,
+                porciones,
+                selected
+              });
+              if (total === null || total === undefined) return 'Desconocido';
               return Math.round((total / porciones) * selected);
             })()}g</div>
           </div>

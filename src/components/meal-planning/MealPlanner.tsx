@@ -1,249 +1,289 @@
 import React, { useState, useEffect } from 'react';
-import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
+import { format, startOfWeek, addDays, isSameDay, endOfWeek } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, ChevronLeft, ChevronRight, Settings, Users } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Settings, Users, Utensils, BarChart2, PieChart as PieIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { DayModal } from './DayModal';
 import { MealTypeManager } from './MealTypeManager';
 import {
-  PieChart, Pie, Cell, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
-
-interface MealType {
-  id: string;
-  name: string;
-  order: number;
-}
-
-interface Recipe {
-  id: string;
-  name: string;
-  date: string;
-  meal_type: string;
-  image_url?: string;
-  instructions?: string;
-  porciones?: number;
-  total_nutrition?: any;
-  live_total_nutrition?: any;
-  ingredients?: any[];
-}
-
-interface Person {
-  id: string;
-  name: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-}
-
-interface Meal {
-  meal_type: string;
-  porciones: number;
-  recipe: Recipe;
-}
-
-interface DailyPlan {
-  date: string;
-  total_calories: number;
-  total_protein: number;
-  total_carbs: number;
-  total_fat: number;
-  calories_percentage?: number;
-  protein_percentage?: number;
-  carbs_percentage?: number;
-  fat_percentage?: number;
-  meals: Meal[];
-}
+import type { MealType, Recipe, Person, Meal, DailyPlan } from '../../types'; // Assuming types are defined here
+import { Link } from 'react-router-dom'; // Import Link
 
 const RECOMMENDED_MACROS = {
-  carbs: { label: 'Carbohidratos', target: 50, color: '#FFBB28' },
-  protein: { label: 'Proteínas', target: 20, color: '#FF8042' },
-  fat: { label: 'Grasas', target: 30, color: '#00C49F' }
+  carbs: { label: 'Carbs', target: 50, color: '#FFBB28' }, // Amarillo/Naranja
+  protein: { label: 'Proteína', target: 20, color: '#0088FE' }, // Azul
+  fat: { label: 'Grasa', target: 30, color: '#FF8042' }  // Naranja/Rojo
 };
 
+// Define the expected structure from the meal_plan_details view
+// This helps ensure type safety when accessing properties
+interface MealPlanDetailRow {
+  meal_plan_id: string; // Assuming this is selected by '*'
+  date: string;
+  meal_type_id: string;
+  meal_type_name: string | null; // Changed from meal_type
+  recipe_id: string | null;
+  porciones: number | null;
+  recipe_name: string | null;
+  image_url: string | null;
+  instructions: string[] | null;
+  receta_porciones: number | null;
+  total_nutrition: Json | null; // Keep as Json or define nutrition structure
+  live_total_nutrition: Json | null; // Keep as Json or define nutrition structure
+  ingredients: Json[] | null; // Keep as Json or define ingredient structure
+}
+
+
 export function MealPlanner() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date()); // Renamed from selectedDate for clarity
+  const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null); // For the modal
   const [mealTypes, setMealTypes] = useState<MealType[]>([]);
-  const [weeklyPlan, setWeeklyPlan] = useState<DailyPlan[]>([]);
+  const [weeklyPlan, setWeeklyPlan] = useState<Map<string, DailyPlan>>(new Map()); // Use Map for easier access
   const [persons, setPersons] = useState<Person[]>([]);
-  const [showDayModal, setShowDayModal] = useState(false);
   const [showMealTypeManager, setShowMealTypeManager] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [activePersonIndex, setActivePersonIndex] = useState(0); // Track selected person for charts
+
+  const weekStartsOn = 1; // Monday
 
   useEffect(() => {
     fetchInitialData();
   }, []);
 
   useEffect(() => {
+    console.log("useEffect triggered: Fetching weekly plan due to change in currentDate or persons.");
     fetchWeeklyPlan();
-  }, [selectedDate]);
+  }, [currentDate, persons]); // Refetch if date or persons change
 
   const fetchInitialData = async () => {
+    console.log("Fetching initial data (meal types, persons)...");
     setIsLoading(true);
     try {
       const [mealTypesResponse, personsResponse] = await Promise.all([
-        supabase
-          .from('meal_types')
-          .select('*')
-          .order('order'),
-        supabase
-          .from('persons')
-          .select('*')
-          .order('name')
+        supabase.from('meal_types').select('*').order('order'),
+        supabase.from('persons').select('*').order('name')
       ]);
 
       if (mealTypesResponse.error) throw mealTypesResponse.error;
       if (personsResponse.error) throw personsResponse.error;
 
-      setMealTypes(mealTypesResponse.data);
-      setPersons(personsResponse.data);
+      console.log("Meal types fetched:", mealTypesResponse.data);
+      console.log("Persons fetched:", personsResponse.data);
+
+      setMealTypes(mealTypesResponse.data || []);
+      setPersons(personsResponse.data || []);
+      if ((personsResponse.data?.length ?? 0) > 0) {
+        setActivePersonIndex(0); // Default to first person
+      } else {
+         console.log("No persons found, planner might be limited.");
+      }
     } catch (error) {
       console.error('Error fetching initial data:', error);
       toast.error('Error al cargar los datos iniciales');
     } finally {
       setIsLoading(false);
+      console.log("Initial data fetch finished.");
     }
   };
 
   const fetchWeeklyPlan = async () => {
+    console.log("Attempting to fetch weekly plan...");
+    if (persons.length === 0) {
+      console.log("Skipping weekly plan fetch: No persons available.");
+      setWeeklyPlan(new Map()); // Clear plan if no persons
+      return;
+    }
     try {
-      const startDate = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const dates = Array.from({ length: 7 }, (_, i) =>
-        format(addDays(startDate, i), 'yyyy-MM-dd')
-      );
+      const startDate = startOfWeek(currentDate, { weekStartsOn });
+      const endDate = endOfWeek(currentDate, { weekStartsOn });
+      const startDateStr = format(startDate, 'yyyy-MM-dd');
+      const endDateStr = format(endDate, 'yyyy-MM-dd');
+      console.log(`Fetching plan for range: ${startDateStr} to ${endDateStr}`);
 
       const { data, error } = await supabase
-        .from('meal_plan_details')
-        .select('*')
-        .in('date', dates);
+        .from('meal_plan_details') // Use the detailed view
+        .select('*') // Select all columns from the view
+        .gte('date', startDateStr)
+        .lte('date', endDateStr);
 
-      if (error) throw error;
-
-      // Agrupa por fecha
-      const groupedByDate: Record<string, any[]> = {};
-      for (const row of data || []) {
-        if (!groupedByDate[row.date]) groupedByDate[row.date] = [];
-        groupedByDate[row.date].push(row);
+      if (error) {
+        console.error('Supabase error fetching weekly plan:', error);
+        throw error; // Rethrow to be caught by the outer catch block
       }
 
-      // Construye el array de DailyPlan
-      const weeklyPlan = dates.map(date => {
-        const meals = (groupedByDate[date] || []).map(row => ({
-          meal_type: row.meal_type,
-          porciones: row.porciones || 1,
-          recipe: {
-            id: row.recipe_id,
-            name: row.recipe_name,
-            image_url: row.image_url,
-            instructions: row.instructions,
-            porciones: row.receta_porciones,
-            total_nutrition: row.total_nutrition,
-            live_total_nutrition: row.live_total_nutrition,
-            ingredients: row.ingredients
+      console.log("Raw data received from meal_plan_details view:", data);
+
+      if (!data) {
+        console.warn("No data returned from meal_plan_details view for the selected week.");
+        setWeeklyPlan(new Map()); // Set empty plan if no data
+        return;
+      }
+
+      const newWeeklyPlan = new Map<string, DailyPlan>();
+      const dates = Array.from({ length: 7 }, (_, i) => format(addDays(startDate, i), 'yyyy-MM-dd'));
+
+      dates.forEach(dateStr => {
+        const mealsForDate = (data as MealPlanDetailRow[]) // Cast to the defined interface
+          .filter(row => row.date === dateStr)
+          .map((row): Meal | null => { // Explicitly define return type including null
+             // **Critical Check:** Ensure essential recipe data exists
+             if (!row.recipe_id || !row.recipe_name) {
+               console.warn(`Skipping meal plan entry for date ${dateStr} due to missing recipe data (ID: ${row.recipe_id}, Name: ${row.recipe_name}). Meal Plan ID: ${row.meal_plan_id}`);
+               return null; // Skip this entry if recipe data is missing
+             }
+
+             // Safely construct the nutrition object
+             const defaultNutrition = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 };
+             const nutritionData = row.live_total_nutrition || row.total_nutrition;
+             const totalNutrition = typeof nutritionData === 'object' && nutritionData !== null
+                ? { ...defaultNutrition, ...nutritionData }
+                : defaultNutrition;
+
+
+             // Construct the meal object
+             return {
+                // Using meal_plan_id for a potentially more stable key if needed later
+                // id: row.meal_plan_id, // Consider if needed for React keys
+                meal_type_id: row.meal_type_id,
+                meal_type_name: row.meal_type_name || 'Tipo Desconocido', // Fallback for null meal type name
+                porciones: row.porciones ?? 1, // Use nullish coalescing for default portions
+                recipe: {
+                  id: row.recipe_id, // Already checked this isn't null
+                  name: row.recipe_name, // Already checked this isn't null
+                  image_url: row.image_url,
+                  instructions: row.instructions || [], // Default to empty array
+                  porciones: row.receta_porciones ?? 1, // Default recipe base portions to 1
+                  total_nutrition: totalNutrition, // Use the safely constructed nutrition object
+                  // Ensure ingredients is an array, default to empty if null/undefined
+                  ingredients: Array.isArray(row.ingredients) ? row.ingredients : []
+                } as Recipe // Cast to Recipe type, assuming Recipe matches this structure
+             };
+          })
+          .filter((meal): meal is Meal => meal !== null); // Type predicate to filter out nulls and satisfy TypeScript
+
+        // Calculate total nutrition for the day based on *planned* portions
+        let total_calories = 0, total_protein = 0, total_carbs = 0, total_fat = 0, total_fiber = 0, total_sugar = 0;
+        mealsForDate.forEach(meal => {
+          // Ensure nutrition object and its properties exist and are numbers
+          const nutrition = meal.recipe?.total_nutrition;
+          const recipeBasePorciones = meal.recipe?.porciones || 1;
+          const plannedPorciones = meal.porciones || 1;
+
+          if (nutrition && recipeBasePorciones > 0) {
+            const factor = plannedPorciones / recipeBasePorciones;
+            total_calories += (Number(nutrition.calories) || 0) * factor;
+            total_protein += (Number(nutrition.protein) || 0) * factor;
+            total_carbs += (Number(nutrition.carbs) || 0) * factor;
+            total_fat += (Number(nutrition.fat) || 0) * factor;
+            total_fiber += (Number(nutrition.fiber) || 0) * factor;
+            total_sugar += (Number(nutrition.sugar) || 0) * factor;
+          } else {
+             console.warn(`Missing or invalid nutrition data or base portions for recipe ${meal.recipe?.name} (ID: ${meal.recipe?.id}) on date ${dateStr}`);
           }
-        }));
+        });
 
-        // Calcula los totales nutricionales
-        let total_calories = 0, total_protein = 0, total_carbs = 0, total_fat = 0;
-        for (const meal of meals) {
-          const nutrition = meal.recipe?.live_total_nutrition || meal.recipe?.total_nutrition || {};
-          const recipePorciones = meal.recipe?.live_total_nutrition?.porciones || meal.recipe?.porciones || 1;
-          // Siempre sumar solo 1 porción (nutrientes por 1 porción)
-          total_calories += (nutrition.calories || 0) / recipePorciones;
-          total_protein += (nutrition.protein || 0) / recipePorciones;
-          total_carbs += (nutrition.carbs || 0) / recipePorciones;
-          total_fat += (nutrition.fat || 0) / recipePorciones;
-        }
-
-        return {
-          date,
-          meals,
-          total_calories,
-          total_protein,
-          total_carbs,
-          total_fat
-        };
+        newWeeklyPlan.set(dateStr, {
+          date: dateStr,
+          meals: mealsForDate,
+          total_calories: Math.round(total_calories),
+          total_protein: Math.round(total_protein),
+          total_carbs: Math.round(total_carbs),
+          total_fat: Math.round(total_fat),
+          total_fiber: Math.round(total_fiber),
+          total_sugar: Math.round(total_sugar),
+        });
       });
 
-      setWeeklyPlan(weeklyPlan);
+      console.log("Processed weekly plan:", newWeeklyPlan);
+      setWeeklyPlan(newWeeklyPlan);
+
     } catch (error) {
-      console.error('Error fetching weekly plan:', error);
+      console.error('Error fetching or processing weekly plan:', error);
       toast.error('Error al cargar el plan semanal');
+      setWeeklyPlan(new Map()); // Clear plan on error
     }
   };
 
-  // Obtiene el plan diario para una fecha específica
+
   const getDailyPlan = (date: Date): DailyPlan | undefined => {
     const formattedDate = format(date, 'yyyy-MM-dd');
-    return weeklyPlan.find(plan => plan.date === formattedDate);
+    return weeklyPlan.get(formattedDate);
   };
 
-  const renderNutritionChart = (dailyPlan: DailyPlan) => {
-    const totalMacros = dailyPlan.total_protein + dailyPlan.total_carbs + dailyPlan.total_fat;
-    if (totalMacros === 0) return null;
+  const handleDayClick = (date: Date) => {
+    console.log("Day clicked:", format(date, 'yyyy-MM-dd'));
+    setSelectedDayDate(date);
+  };
 
-    const actualPercentages = {
-      carbs: Math.round((dailyPlan.total_carbs / totalMacros) * 100),
-      protein: Math.round((dailyPlan.total_protein / totalMacros) * 100),
-      fat: Math.round((dailyPlan.total_fat / totalMacros) * 100)
-    };
+  const closeDayModal = () => {
+    console.log("Closing day modal.");
+    setSelectedDayDate(null);
+    // No automatic refetch here, rely on onDataChanged from modal
+    // fetchWeeklyPlan(); // Removed: Let DayModal trigger refetch via onDataChanged
+  };
 
-    const data = Object.entries(RECOMMENDED_MACROS).map(([key, value]) => ({
-      name: value.label,
-      actual: actualPercentages[key as keyof typeof actualPercentages] || 0,
-      target: value.target,
-      color: value.color
+  const handleDataChanged = () => {
+    console.log("Data changed (likely from DayModal), refetching weekly plan.");
+    fetchWeeklyPlan(); // Refetch data when modal signals changes
+  }
+
+  const renderNutritionPieChart = (dailyPlan: DailyPlan) => {
+    const totalGrams = (dailyPlan.total_protein || 0) + (dailyPlan.total_carbs || 0) + (dailyPlan.total_fat || 0);
+    if (totalGrams === 0) return <p className="text-sm text-gray-500 text-center py-8">No hay datos de macronutrientes para mostrar.</p>;
+
+    const data = [
+      { name: RECOMMENDED_MACROS.carbs.label, value: dailyPlan.total_carbs || 0, target: RECOMMENDED_MACROS.carbs.target, color: RECOMMENDED_MACROS.carbs.color },
+      { name: RECOMMENDED_MACROS.protein.label, value: dailyPlan.total_protein || 0, target: RECOMMENDED_MACROS.protein.target, color: RECOMMENDED_MACROS.protein.color },
+      { name: RECOMMENDED_MACROS.fat.label, value: dailyPlan.total_fat || 0, target: RECOMMENDED_MACROS.fat.target, color: RECOMMENDED_MACROS.fat.color },
+    ];
+
+    const actualPercentages = data.map(item => ({
+      ...item,
+      percentage: totalGrams > 0 ? Math.round((item.value / totalGrams) * 100) : 0,
     }));
 
     return (
-      <div className="space-y-6">
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">
-            Distribución de macronutrientes <span className="text-xs text-gray-500">(por porción)</span>
-          </h4>
-          <div className="grid grid-cols-3 gap-4">
-            {data.map(item => (
-              <div key={item.name} className="text-sm">
-                <div className="font-medium" style={{ color: item.color }}>
-                  {item.name}
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Actual: {item.actual}%</span>
-                  <span>Meta: {item.target}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="space-y-4">
+         <div className="grid grid-cols-3 gap-2 text-center">
+          {actualPercentages.map(item => (
+            <div key={item.name} className="text-xs p-2 bg-gray-50 rounded border border-gray-200">
+              <div className="font-semibold" style={{ color: item.color }}>{item.name}</div>
+              <div className="text-gray-700">{item.percentage}% <span className="text-gray-500">({item.value}g)</span></div>
+              <div className="text-gray-500">Meta: {item.target}%</div>
+            </div>
+          ))}
         </div>
-
-        <div className="h-64">
+        <div className="h-56 sm:h-64"> {/* Adjust height for responsiveness */}
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={data}
+                data={actualPercentages}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="actual"
-                label={({ name, actual }) => `${name}: ${actual ?? 0}%`}
+                innerRadius="50%" // Make it a donut chart
+                outerRadius="80%"
+                paddingAngle={3}
+                dataKey="percentage"
+                labelLine={false}
+                label={({ name, percentage }) => `${name}: ${percentage}%`}
               >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+                {actualPercentages.map((entry) => (
+                  <Cell key={`cell-${entry.name}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(value: any, name: string) => {
-                  const val = value != null ? value : 0;
-                  return [`${val}% (por porción)`, name];
+              <RechartsTooltip
+                formatter={(value: number, name: string, props: any) => {
+                  const item = actualPercentages.find(d => d.name === name);
+                  return [`${item?.value ?? 0}g (${value}%)`, name];
                 }}
-                contentStyle={{ backgroundColor: 'white', borderRadius: '0.5rem' }}
+                contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '0.375rem', border: '1px solid #e5e7eb', padding: '8px' }}
+                itemStyle={{ fontSize: '12px' }}
               />
-              <Legend />
+              {/* <Legend verticalAlign="bottom" height={36}/> */}
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -251,71 +291,54 @@ export function MealPlanner() {
     );
   };
 
-  const renderPersonProgress = (dailyPlan: DailyPlan, person: Person) => {
+  const renderPersonProgressBarChart = (dailyPlan: DailyPlan, person: Person) => {
+    // Ensure targets are numbers and greater than 0 for percentage calculation
+    const safeTarget = (target: number | null | undefined) => Math.max(Number(target) || 0, 0);
+
     const data = [
-      {
-        name: 'Calorías',
-        actual: Math.round(dailyPlan.total_calories) || 0,
-        target: person.calories,
-        percentage: Math.round((dailyPlan.total_calories / person.calories) * 100) || 0,
-        color: '#8884d8'
-      },
-      {
-        name: 'Proteínas',
-        actual: Math.round(dailyPlan.total_protein) || 0,
-        target: person.protein,
-        percentage: Math.round((dailyPlan.total_protein / person.protein) * 100) || 0,
-        color: '#FF8042'
-      },
-      {
-        name: 'Carbohidratos',
-        actual: Math.round(dailyPlan.total_carbs) || 0,
-        target: person.carbs,
-        percentage: Math.round((dailyPlan.total_carbs / person.carbs) * 100) || 0,
-        color: '#FFBB28'
-      },
-      {
-        name: 'Grasas',
-        actual: Math.round(dailyPlan.total_fat) || 0,
-        target: person.fat,
-        percentage: Math.round((dailyPlan.total_fat / person.fat) * 100) || 0,
-        color: '#00C49F'
-      }
-    ];
+      { name: 'Calorías', actual: dailyPlan.total_calories || 0, target: safeTarget(person.calories), unit: 'kcal', color: '#8884d8' },
+      { name: 'Proteínas', actual: dailyPlan.total_protein || 0, target: safeTarget(person.protein), unit: 'g', color: RECOMMENDED_MACROS.protein.color },
+      { name: 'Carbs', actual: dailyPlan.total_carbs || 0, target: safeTarget(person.carbs), unit: 'g', color: RECOMMENDED_MACROS.carbs.color },
+      { name: 'Grasas', actual: dailyPlan.total_fat || 0, target: safeTarget(person.fat), unit: 'g', color: RECOMMENDED_MACROS.fat.color },
+    ].map(item => ({
+      ...item,
+      // Calculate percentage, cap at a reasonable max like 150% for visual clarity
+      percentage: item.target > 0 ? Math.min(Math.round((item.actual / item.target) * 100), 150) : 0,
+    }));
 
     return (
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold mb-4">{person.name}</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={data}
-              layout="vertical"
-              margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" domain={[0, 100]} unit="%" />
-              <YAxis dataKey="name" type="category" width={100} />
-              <Tooltip
-                formatter={(value: any, name: string, props: any) => {
-                  if (!props || !props.payload) return ['-', name];
-                  const item = data.find(d => d.name === props.payload.name);
-                  if (!item) return ['-', name];
-                  return [`${item.actual}/${item.target}g (${item.percentage}%)`, name];
-                }}
-                contentStyle={{ backgroundColor: 'white', borderRadius: '0.5rem' }}
-              />
-              <Bar dataKey="percentage" fill="#8884d8">
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="h-64 sm:h-72"> {/* Adjust height */}
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={data}
+            layout="vertical"
+            margin={{ top: 5, right: 30, left: 60, bottom: 5 }} // Adjust margins
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis type="number" domain={[0, 100]} unit="%" tickFormatter={(value) => `${value}%`} />
+            <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} />
+            <RechartsTooltip
+              formatter={(value: number, name: string, props: any) => {
+                 const item = data.find(d => d.name === props.payload.name);
+                 if (!item) return ['-', name];
+                 const actualPercentage = item.target > 0 ? Math.round((item.actual / item.target) * 100) : 0;
+                 // Display actual vs target, and the percentage achieved
+                 return [`${item.actual}${item.unit} / ${item.target}${item.unit} (${actualPercentage}%)`, name];
+              }}
+              contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '0.375rem', border: '1px solid #e5e7eb', padding: '8px' }}
+              itemStyle={{ fontSize: '12px' }}
+            />
+            <Bar dataKey="percentage" barSize={20}>
+              {data.map((entry) => (
+                <Cell key={`cell-${entry.name}`} fill={entry.color} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     );
   };
+
 
   if (isLoading) {
     return (
@@ -331,130 +354,183 @@ export function MealPlanner() {
     );
   }
 
-  if (persons.length === 0) {
+  if (persons.length === 0 && !isLoading) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 bg-white rounded-lg shadow p-6">
         <Users className="w-12 h-12 mx-auto text-gray-400 mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
           No hay personas configuradas
         </h2>
-        <p className="text-gray-600 mb-4">
-          Para usar el planificador, primero debes crear al menos una persona con sus objetivos nutricionales.
+        <p className="text-gray-600 mb-4 max-w-md mx-auto">
+          Para usar el planificador y ver el progreso nutricional, primero debes crear al menos una persona con sus objetivos.
         </p>
-        <a
-          href="/personas"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        <Link // Use React Router Link
+          to="/personas"
+          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4 mr-2" />
           Crear Persona
-        </a>
+        </Link>
       </div>
     );
   }
 
+  const currentWeekStart = startOfWeek(currentDate, { weekStartsOn });
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  const selectedPerson = persons[activePersonIndex];
+  const today = new Date();
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Planificador de Comidas</h1>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">Planificador Semanal</h1>
         <button
           onClick={() => setShowMealTypeManager(true)}
-          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center"
+          className="w-full sm:w-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center justify-center text-sm"
         >
           <Settings className="w-4 h-4 mr-2" />
           Gestionar Tipos de Comida
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-center mb-6">
+      {/* Week Navigation */}
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <div className="flex justify-between items-center mb-4">
           <button
-            onClick={() => setSelectedDate(addDays(selectedDate, -7))}
-            className="p-2 hover:bg-gray-100 rounded-full"
+            onClick={() => setCurrentDate(addDays(currentDate, -7))}
+            className="p-2 hover:bg-gray-100 rounded-full text-gray-600 hover:text-gray-800"
+            aria-label="Semana anterior"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-lg font-semibold">
-            Semana del {format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'dd/MM/yyyy')}
+          <h2 className="text-base sm:text-lg font-semibold text-center">
+            Semana del {format(currentWeekStart, 'd MMM', { locale: es })} - {format(endOfWeek(currentDate, { weekStartsOn }), 'd MMM yyyy', { locale: es })}
           </h2>
           <button
-            onClick={() => setSelectedDate(addDays(selectedDate, 7))}
-            className="p-2 hover:bg-gray-100 rounded-full"
+            onClick={() => setCurrentDate(addDays(currentDate, 7))}
+            className="p-2 hover:bg-gray-100 rounded-full text-gray-600 hover:text-gray-800"
+            aria-label="Semana siguiente"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-4">
-          {Array.from({ length: 7 }, (_, i) => {
-            const date = addDays(startOfWeek(selectedDate, { weekStartsOn: 1 }), i);
+        {/* Weekly Calendar Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3">
+          {weekDays.map((date) => {
             const dailyPlan = getDailyPlan(date);
-            const isSelected = isSameDay(date, selectedDate);
+            const isToday = isSameDay(date, today);
 
             return (
               <div
-                key={i}
-                className={`p-4 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-2 border-blue-500' : 'bg-gray-50 hover:bg-gray-100'
-                  }`}
-                onClick={() => {
-                  setSelectedDate(date);
-                  setShowDayModal(true);
-                }}
+                key={date.toISOString()}
+                className={`rounded-lg border p-3 cursor-pointer transition-all flex flex-col min-h-[120px] ${isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                onClick={() => handleDayClick(date)}
               >
                 <div className="text-center mb-2">
-                  <div className="font-medium">
+                  <div className={`font-medium text-sm ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>
                     {format(date, 'EEE', { locale: es })}
                   </div>
-                  <div className="text-sm text-gray-500">
+                  <div className={`text-xs ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>
                     {format(date, 'dd/MM')}
                   </div>
                 </div>
 
-                {dailyPlan && (
-                  <div className="space-y-4">
-                    {(Array.isArray(dailyPlan.meals) ? dailyPlan.meals : []).map((meal, index) => (
-                      <div key={index} className="text-base leading-relaxed">
-                        <div className="font-bold text-gray-800 mb-0.5">{meal.meal_type}</div>
-                        <div className="text-gray-600 mb-0.5">{meal.porciones || 1} {meal.porciones === 1 ? 'porción' : 'porciones'}</div>
-                        <div className="text-gray-900 whitespace-normal break-words">{meal.recipe.name}</div>
+                <div className="flex-grow space-y-1.5 overflow-y-auto text-xs">
+                  {dailyPlan && dailyPlan.meals.length > 0 ? (
+                    dailyPlan.meals.map((meal, index) => (
+                      // Use a more stable key if possible, e.g., combining meal_type and recipe id
+                      <div key={`${meal.meal_type_id}-${meal.recipe.id}-${index}`} className="bg-white p-1.5 rounded border border-gray-100 shadow-sm text-gray-700 leading-tight">
+                        <div className="font-medium text-gray-800 truncate">{meal.recipe.name}</div>
+                        <div className="text-gray-500">{meal.meal_type_name} ({meal.porciones}p)</div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                     <div className="flex items-center justify-center h-full text-gray-400">
+                       <Utensils className="w-4 h-4"/>
+                     </div>
+                  )}
+                </div>
+                 <button
+                    onClick={(e) => { e.stopPropagation(); handleDayClick(date); }}
+                    className="mt-2 w-full text-center text-xs text-blue-600 hover:underline"
+                  >
+                    {dailyPlan && dailyPlan.meals.length > 0 ? 'Ver/Editar' : 'Añadir Comida'}
+                  </button>
               </div>
             );
           })}
         </div>
       </div>
 
-      {weeklyPlan.length > 0 && getDailyPlan(selectedDate) && (
-        <>
-          <div className="grid grid-cols-2 gap-6">
-            {persons.map(person => (
-              <div key={person.id}>
-                {renderPersonProgress(getDailyPlan(selectedDate)!, person)}
-              </div>
+      {/* Person Selector and Charts */}
+      {persons.length > 0 && selectedPerson && (
+        <div className="space-y-6">
+          {/* Person Selector Tabs */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+             <span className="text-sm font-medium text-gray-600 mr-2">Ver progreso para:</span>
+            {persons.map((person, index) => (
+              <button
+                key={person.id}
+                onClick={() => setActivePersonIndex(index)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  index === activePersonIndex
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {person.name}
+              </button>
             ))}
           </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold mb-4">
-              Distribución de Macronutrientes
-            </h3>
-            {renderNutritionChart(getDailyPlan(selectedDate)!)}
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Daily Progress Chart */}
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+              <h3 className="text-lg font-semibold mb-1 text-gray-800 flex items-center gap-2">
+                <BarChart2 className="w-5 h-5 text-blue-600"/>
+                Progreso Diario vs Objetivos
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Nutrientes consumidos hoy ({format(today, 'EEEE d MMM', { locale: es })}) vs objetivos de {selectedPerson.name}.
+              </p>
+              {getDailyPlan(today) ? (
+                renderPersonProgressBarChart(getDailyPlan(today)!, selectedPerson)
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-8">No hay comidas planificadas para hoy.</p>
+              )}
+            </div>
+
+            {/* Daily Macronutrient Distribution */}
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+              <h3 className="text-lg font-semibold mb-1 text-gray-800 flex items-center gap-2">
+                 <PieIcon className="w-5 h-5 text-orange-500"/>
+                 Distribución de Macros (Hoy)
+              </h3>
+               <p className="text-sm text-gray-500 mb-4">
+                Porcentaje de calorías provenientes de Carbs, Proteínas y Grasas hoy.
+              </p>
+              {getDailyPlan(today) ? (
+                renderNutritionPieChart(getDailyPlan(today)!)
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-8">No hay comidas planificadas para hoy.</p>
+              )}
+            </div>
           </div>
-        </>
+        </div>
       )}
 
-      {showDayModal && (
+
+      {/* Modals */}
+      {selectedDayDate && (
         <DayModal
-          date={selectedDate}
+          date={selectedDayDate}
           mealTypes={mealTypes}
-          dailyPlan={getDailyPlan(selectedDate)}
-          onClose={() => {
-            setShowDayModal(false);
-            fetchWeeklyPlan();
-          }}
-          onDataChanged={fetchWeeklyPlan}
+          dailyPlan={getDailyPlan(selectedDayDate)} // Pass the potentially undefined plan
+          onClose={closeDayModal}
+          onDataChanged={handleDataChanged} // Pass the handler to trigger refetch
         />
       )}
 
@@ -462,8 +538,9 @@ export function MealPlanner() {
         <MealTypeManager
           mealTypes={mealTypes}
           onClose={() => {
+            console.log("Closing MealTypeManager, refetching initial data.");
             setShowMealTypeManager(false);
-            fetchInitialData();
+            fetchInitialData(); // Refetch meal types and potentially persons
           }}
         />
       )}
