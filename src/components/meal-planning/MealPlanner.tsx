@@ -55,9 +55,11 @@ export function MealPlanner() {
   }, []);
 
   useEffect(() => {
-    console.log("useEffect triggered: Fetching weekly plan due to change in currentDate or persons.");
-    fetchWeeklyPlan();
-  }, [currentDate, persons]); // Refetch if date or persons change
+    if (mealTypes.length > 0 && persons.length > 0) {
+      console.log('Calling fetchWeeklyPlan with persons:', persons, 'and mealTypes:', mealTypes);
+      fetchWeeklyPlan();
+    }
+  }, [currentDate, mealTypes, persons]);
 
   const fetchInitialData = async () => {
     console.log("Fetching initial data (meal types, persons)...");
@@ -91,9 +93,9 @@ export function MealPlanner() {
   };
 
   const fetchWeeklyPlan = async () => {
-    console.log("Attempting to fetch weekly plan...");
+    
     if (persons.length === 0) {
-      console.log("Skipping weekly plan fetch: No persons available.");
+      
       setWeeklyPlan(new Map()); // Clear plan if no persons
       return;
     }
@@ -102,7 +104,7 @@ export function MealPlanner() {
       const endDate = endOfWeek(currentDate, { weekStartsOn });
       const startDateStr = format(startDate, 'yyyy-MM-dd');
       const endDateStr = format(endDate, 'yyyy-MM-dd');
-      console.log(`Fetching plan for range: ${startDateStr} to ${endDateStr}`);
+      
 
       const { data, error } = await supabase
         .from('meal_plan_details') // Use the detailed view
@@ -111,14 +113,18 @@ export function MealPlanner() {
         .lte('date', endDateStr);
 
       if (error) {
-        console.error('Supabase error fetching weekly plan:', error);
+        
         throw error; // Rethrow to be caught by the outer catch block
       }
 
-      console.log("Raw data received from meal_plan_details view:", data);
+      if (data) {
+        (data as MealPlanDetailRow[]).forEach(row => {
+          console.log('Meal row:', row.date, row.meal_type_name, row.recipe_name, row);
+        });
+      }
 
       if (!data) {
-        console.warn("No data returned from meal_plan_details view for the selected week.");
+        
         setWeeklyPlan(new Map()); // Set empty plan if no data
         return;
       }
@@ -127,12 +133,18 @@ export function MealPlanner() {
       const dates = Array.from({ length: 7 }, (_, i) => format(addDays(startDate, i), 'yyyy-MM-dd'));
 
       dates.forEach(dateStr => {
-        const mealsForDate = (data as MealPlanDetailRow[]) // Cast to the defined interface
-          .filter(row => row.date === dateStr)
-          .map((row): Meal | null => { // Explicitly define return type including null
+        const mealsForDate = (data as MealPlanDetailRow[])
+          .filter(row => {
+            const match = row.date === dateStr;
+            if (match) {
+              console.log('Assigning meal to date:', dateStr, 'meal:', row);
+            }
+            return match;
+          })
+          .map((row): Meal | null => {
              // **Critical Check:** Ensure essential recipe data exists
              if (!row.recipe_id || !row.recipe_name) {
-               console.warn(`Skipping meal plan entry for date ${dateStr} due to missing recipe data (ID: ${row.recipe_id}, Name: ${row.recipe_name}). Meal Plan ID: ${row.meal_plan_id}`);
+               
                return null; // Skip this entry if recipe data is missing
              }
 
@@ -148,8 +160,7 @@ export function MealPlanner() {
              return {
                 // Using meal_plan_id for a potentially more stable key if needed later
                 // id: row.meal_plan_id, // Consider if needed for React keys
-                meal_type_id: row.meal_type_id,
-                meal_type_name: row.meal_type_name || 'Tipo Desconocido', // Fallback for null meal type name
+                meal_type_name: row.meal_type || mealTypes.find(mt => mt.id === row.meal_type_id)?.name || 'Tipo Desconocido', // Fallback for null meal type name
                 porciones: row.porciones ?? 1, // Use nullish coalescing for default portions
                 recipe: {
                   id: row.recipe_id, // Already checked this isn't null
@@ -182,7 +193,7 @@ export function MealPlanner() {
             total_fiber += (Number(nutrition.fiber) || 0) * factor;
             total_sugar += (Number(nutrition.sugar) || 0) * factor;
           } else {
-             console.warn(`Missing or invalid nutrition data or base portions for recipe ${meal.recipe?.name} (ID: ${meal.recipe?.id}) on date ${dateStr}`);
+             
           }
         });
 
@@ -202,7 +213,7 @@ export function MealPlanner() {
       setWeeklyPlan(newWeeklyPlan);
 
     } catch (error) {
-      console.error('Error fetching or processing weekly plan:', error);
+      
       toast.error('Error al cargar el plan semanal');
       setWeeklyPlan(new Map()); // Clear plan on error
     }
