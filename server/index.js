@@ -77,5 +77,5 @@ app.get('*', (req, res, next) => {
 });
 
 app.listen(port, () => {
-
+  console.log(`Servidor iniciado en http://localhost:${port}`);
 });
