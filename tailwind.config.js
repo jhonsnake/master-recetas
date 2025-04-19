@@ -12,7 +12,6 @@ export default {
   plugins: [
     require('@tailwindcss/forms'), // Useful for form styling consistency
     require('@tailwindcss/typography'), // If you use prose for markdown/rich text
-    require('@tailwindcss/line-clamp'), // For truncating text
     require('@headlessui/tailwindcss')({ prefix: 'ui' }) // If using Headless UI components
   ],
 };

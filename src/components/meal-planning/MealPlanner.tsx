@@ -40,6 +40,8 @@ interface MealPlanDetailRow {
 
 export function MealPlanner() {
   const [currentDate, setCurrentDate] = useState(new Date()); // Renamed from selectedDate for clarity
+  // Por defecto, selecciona el día de hoy
+  const [selectedDay, setSelectedDay] = useState<Date>(() => new Date()); // For the charts
   const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null); // For the modal
   const [mealTypes, setMealTypes] = useState<MealType[]>([]);
   const [weeklyPlan, setWeeklyPlan] = useState<Map<string, DailyPlan>>(new Map()); // Use Map for easier access
@@ -226,7 +228,11 @@ export function MealPlanner() {
   };
 
   const handleDayClick = (date: Date) => {
+    setSelectedDay(date);
+  };
 
+  const openDayModal = (date: Date) => {
+    setSelectedDay(date);
     setSelectedDayDate(date);
   };
 
@@ -433,19 +439,27 @@ export function MealPlanner() {
             const dailyPlan = getDailyPlan(date);
             const isToday = isSameDay(date, today);
 
-            return (
-              <div
-                key={date.toISOString()}
-                className={`rounded-lg border p-3 cursor-pointer transition-all flex flex-col min-h-[120px] ${isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
-                onClick={() => handleDayClick(date)}
-              >
+              const isSelected = selectedDay && isSameDay(date, selectedDay);
+              return (
+                <div
+                  key={date.toISOString()}
+                  className={`rounded-lg border p-3 cursor-pointer transition-all flex flex-col min-h-[120px] 
+                    ${isSelected ? 'border-2 border-blue-600 bg-blue-100 shadow-lg ring-2 ring-blue-400' : isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                  onClick={() => handleDayClick(date)}
+                >
                 <div className="text-center mb-2">
-                  <div className={`font-medium text-sm ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>
-                    {format(date, 'EEE', { locale: es })}
-                  </div>
-                  <div className={`text-xs ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>
-                    {format(date, 'dd/MM')}
-                  </div>
+                      <div className={`font-semibold text-base ${isSelected ? 'text-blue-900' : isToday ? 'text-blue-700' : 'text-gray-700'}`}>
+                        {format(date, 'EEE', { locale: es })}
+                      </div>
+                      <div className={`text-xs flex items-center justify-center gap-1 ${isSelected ? 'text-blue-800' : isToday ? 'text-blue-600' : 'text-gray-500'}`}>
+                        {format(date, 'dd/MM')}
+                        {isToday && <span className="ml-1 px-1 rounded bg-blue-200 text-blue-800 text-[10px] font-bold">Hoy</span>}
+                      </div>
+                      {isSelected && (
+                        <div className="mt-1 flex justify-center">
+                          <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-bounce"></span>
+                        </div>
+                      )}
                 </div>
 
                 <div className="flex-grow space-y-1.5 overflow-y-auto text-xs">
@@ -464,7 +478,7 @@ export function MealPlanner() {
                   )}
                 </div>
                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDayClick(date); }}
+                    onClick={(e) => { e.stopPropagation(); openDayModal(date); }}
                     className="mt-2 w-full text-center text-xs text-blue-600 hover:underline"
                   >
                     {dailyPlan && dailyPlan.meals.length > 0 ? 'Ver/Editar' : 'Añadir Comida'}
@@ -505,12 +519,16 @@ export function MealPlanner() {
                 Progreso Diario vs Objetivos
               </h3>
               <p className="text-sm text-gray-500 mb-4">
-                Nutrientes consumidos hoy ({format(today, 'EEEE d MMM', { locale: es })}) vs objetivos de {selectedPerson.name}.
+                {selectedDay ? (
+                  <>Nutrientes consumidos el día seleccionado ({format(selectedDay, 'EEEE d MMM', { locale: es })}) vs objetivos de {selectedPerson.name}.</>
+                ) : (
+                  <>Selecciona un día para ver el progreso.</>
+                )}
               </p>
-              {getDailyPlan(today) ? (
-                renderPersonProgressBarChart(getDailyPlan(today)!, selectedPerson)
+              {selectedDay && getDailyPlan(selectedDay) ? (
+                renderPersonProgressBarChart(getDailyPlan(selectedDay)!, selectedPerson)
               ) : (
-                <p className="text-sm text-gray-500 text-center py-8">No hay comidas planificadas para hoy.</p>
+                <p className="text-sm text-gray-500 text-center py-8">No hay comidas planificadas para este día.</p>
               )}
             </div>
 
@@ -518,15 +536,19 @@ export function MealPlanner() {
             <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
               <h3 className="text-lg font-semibold mb-1 text-gray-800 flex items-center gap-2">
                  <PieIcon className="w-5 h-5 text-orange-500"/>
-                 Distribución de Macros (Hoy)
+                 Distribución de Macros (Día seleccionado)
               </h3>
                <p className="text-sm text-gray-500 mb-4">
-                Porcentaje de calorías provenientes de Carbs, Proteínas y Grasas hoy.
+                {selectedDay ? (
+                  <>Porcentaje de calorías provenientes de Carbs, Proteínas y Grasas del día seleccionado.</>
+                ) : (
+                  <>Selecciona un día para ver la distribución de macros.</>
+                )}
               </p>
-              {getDailyPlan(today) ? (
-                renderNutritionPieChart(getDailyPlan(today)!)
+              {selectedDay && getDailyPlan(selectedDay) ? (
+                renderNutritionPieChart(getDailyPlan(selectedDay)!)
               ) : (
-                <p className="text-sm text-gray-500 text-center py-8">No hay comidas planificadas para hoy.</p>
+                <p className="text-sm text-gray-500 text-center py-8">No hay comidas planificadas para este día.</p>
               )}
             </div>
           </div>
