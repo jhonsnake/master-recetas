@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { format, startOfWeek, addDays, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Info, Save, Check, Calendar, Plus, Trash2, Edit2, Copy, Tag } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Info, Check, Calendar, Edit2, Tag } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 
@@ -61,24 +61,23 @@ const SUGGESTED_TAGS = [
 ];
 
 export function ShoppingList() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const [ingredients, setIngredients] = useState<IngredientSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showRecipeInfo, setShowRecipeInfo] = useState<string | null>(null);
   const [savedLists, setSavedLists] = useState<SavedList[]>([]);
   const [selectedList, setSelectedList] = useState<SavedList | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [dateRange, setDateRange] = useState({
     start: startOfWeek(new Date(), { weekStartsOn: 1 }),
     end: addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), 6)
   });
   const [listName, setListName] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<{ [id: string]: { quantity: number; unit: string } }>({});
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [groupByTags, setGroupByTags] = useState(false);
   const [showCompleted, setShowCompleted] = useState(true);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Obtener todas las etiquetas disponibles
   const allTags = Array.from(
     new Set([
       ...SUGGESTED_TAGS,
@@ -86,35 +85,19 @@ export function ShoppingList() {
     ])
   );
 
-  // Limpiar selectedTags si desaparecen de la lista dinámica
   useEffect(() => {
     setSelectedTags(prev => prev.filter(tag => allTags.includes(tag)));
   }, [ingredients]);
 
-  // Suscripción a cambios en meal_plan_details para refrescar ingredientes
   useEffect(() => {
     fetchSavedLists();
-
     const subscription = supabase
       .channel('meal_plan_details_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'meal_plan_details'
-        },
-        () => {
-          if (!selectedList) {
-            fetchWeeklyIngredients();
-          }
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meal_plan_details' }, () => {
+        if (!selectedList) fetchWeeklyIngredients();
+      })
       .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => { subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -123,42 +106,31 @@ export function ShoppingList() {
     } else {
       fetchWeeklyIngredients();
     }
-  }, [selectedDate, selectedList, dateRange]);
+  }, [selectedList, dateRange]);
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
   };
 
   const getFilteredAndGroupedIngredients = useCallback(() => {
     let filtered = ingredients;
-
-    if (!showCompleted) {
-      filtered = filtered.filter(item => !item.purchased);
-    }
-
-    if (selectedTags.length > 0) {
-      filtered = filtered.filter(item =>
-        selectedTags.some(tag => item.ingredient.tags?.includes(tag))
+    if (!showCompleted) filtered = filtered.filter(i => !i.purchased);
+    if (selectedTags.length)
+      filtered = filtered.filter(i =>
+        selectedTags.some(tag => i.ingredient.tags?.includes(tag))
       );
-    }
-
-    if (!groupByTags) {
-      return { Todos: filtered };
-    }
-
-    return filtered.reduce((groups: { [key: string]: IngredientSummary[] }, item) => {
-      const itemTags = item.ingredient.tags || [];
-      if (itemTags.length === 0) {
+    if (!groupByTags) return { Todos: filtered };
+    return filtered.reduce((groups: Record<string, IngredientSummary[]>, i) => {
+      const tags = i.ingredient.tags || [];
+      if (!tags.length) {
         groups['Sin categoría'] = groups['Sin categoría'] || [];
-        groups['Sin categoría'].push(item);
+        groups['Sin categoría'].push(i);
       } else {
-        itemTags.forEach(tag => {
+        tags.forEach(tag => {
           groups[tag] = groups[tag] || [];
-          groups[tag].push(item);
+          groups[tag].push(i);
         });
       }
       return groups;
@@ -171,11 +143,10 @@ export function ShoppingList() {
         .from('shopping_lists')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setSavedLists(data || []);
-    } catch (error) {
-      console.error('Error fetching saved lists:', error);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al cargar las listas guardadas');
     }
   };
@@ -192,34 +163,24 @@ export function ShoppingList() {
           purchased,
           recipes,
           ingredients (
-            id,
-            name,
-            base_unit,
-            base_quantity,
-            image_url,
-            tags,
-            unit_equivalences (
-              unit_name,
-              conversion_factor
-            )
+            id,name,base_unit,base_quantity,image_url,tags,
+            unit_equivalences(unit_name,conversion_factor)
           )
         `)
         .eq('shopping_list_id', listId);
-
       if (error) throw error;
-
-      const processedIngredients = data.map(item => ({
-        ingredient: item.ingredients,
-        totalQuantity: item.quantity,
-        customQuantity: item.custom_quantity,
-        customUnit: item.custom_unit,
-        recipes: item.recipes || [],
-        purchased: item.purchased
-      }));
-
-      setIngredients(processedIngredients);
-    } catch (error) {
-      console.error('Error fetching list items:', error);
+      setIngredients(
+        data.map(item => ({
+          ingredient: Array.isArray(item.ingredients) ? item.ingredients[0] : item.ingredients,
+          totalQuantity: item.quantity,
+          customQuantity: item.custom_quantity,
+          customUnit: item.custom_unit,
+          recipes: item.recipes || [],
+          purchased: item.purchased
+        }))
+      );
+    } catch (err) {
+      console.error(err);
       toast.error('Error al cargar los items de la lista');
     } finally {
       setIsLoading(false);
@@ -229,40 +190,28 @@ export function ShoppingList() {
   const fetchWeeklyIngredients = async () => {
     setIsLoading(true);
     try {
-      const dates = [];
+      const dates: string[] = [];
       let curr = dateRange.start;
       while (curr <= dateRange.end) {
         dates.push(format(curr, 'yyyy-MM-dd'));
         curr = addDays(curr, 1);
       }
-
-      const { data: mealPlanDetails, error: mealPlanDetailsError } = await supabase
+      const { data: details, error } = await supabase
         .from('meal_plan_details')
-        .select(`
-          date,
-          meal_type,
-          recipe_id,
-          recipe_name,
-          ingredients
-        `)
+        .select(`date,meal_type,recipe_id,recipe_name,ingredients`)
         .in('date', dates);
-
-      if (mealPlanDetailsError) throw mealPlanDetailsError;
-
-      const ingredientMap = new Map<string, IngredientSummary>();
-
-      mealPlanDetails?.forEach((card: any) => {
+      if (error) throw error;
+      const map = new Map<string, IngredientSummary>();
+      details.forEach((card: any) => {
         card.ingredients?.forEach((ing: any) => {
-          if (!ing || !ing.id) return;
-          const existing = ingredientMap.get(ing.id);
+          if (!ing?.id) return;
+          const existing = map.get(ing.id);
           if (existing) {
             existing.totalQuantity += ing.quantity;
-            const recipeIdx = existing.recipes.findIndex(
-              r => r.id === card.recipe_id && r.date === card.date
-            );
-            if (recipeIdx > -1) {
-              existing.recipes[recipeIdx].quantity += ing.quantity;
-              existing.recipes[recipeIdx].porciones += ing.porciones;
+            const idx = existing.recipes.findIndex(r => r.id === card.recipe_id && r.date === card.date);
+            if (idx > -1) {
+              existing.recipes[idx].quantity += ing.quantity;
+              existing.recipes[idx].porciones! += ing.porciones!;
             } else {
               existing.recipes.push({
                 id: card.recipe_id,
@@ -275,7 +224,7 @@ export function ShoppingList() {
               });
             }
           } else {
-            ingredientMap.set(ing.id, {
+            map.set(ing.id, {
               ingredient: ing,
               totalQuantity: ing.quantity,
               recipes: [{
@@ -291,42 +240,36 @@ export function ShoppingList() {
           }
         });
       });
-
-      setIngredients(Array.from(ingredientMap.values()));
-    } catch (error) {
-      console.error('Error fetching weekly ingredients:', error);
+      setIngredients(Array.from(map.values()));
+    } catch (err) {
+      console.error(err);
       toast.error('Error al cargar la lista de compras');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const convertToBaseUnit = (qty: number, unit: string, ing: Ingredient) => {
+    if (unit === ing.base_unit) return qty;
+    const conv = ing.unit_equivalences?.find(u => u.unit_name === unit);
+    return conv ? qty * conv.conversion_factor : qty;
+  };
+
   const getEquivalences = (item: IngredientSummary) => {
     if (!item.ingredient.unit_equivalences?.length) {
       return [{ unit: item.ingredient.base_unit, quantity: item.totalQuantity }];
     }
-
-    const quantity = item.customQuantity ?? item.totalQuantity;
-    const baseQuantity = item.customUnit
-      ? convertToBaseUnit(quantity, item.customUnit, item.ingredient)
-      : quantity;
-
+    const qty = item.customQuantity ?? item.totalQuantity;
+    const baseQty = item.customUnit
+      ? convertToBaseUnit(qty, item.customUnit, item.ingredient)
+      : qty;
     return [
-      { unit: item.ingredient.base_unit, quantity: Math.round(baseQuantity * 100) / 100 },
-      ...item.ingredient.unit_equivalences.map(ue => ({
-        unit: ue.unit_name,
-        quantity: Math.round((baseQuantity / ue.conversion_factor) * 100) / 100
+      { unit: item.ingredient.base_unit, quantity: Math.round(baseQty * 100) / 100 },
+      ...item.ingredient.unit_equivalences.map(u => ({
+        unit: u.unit_name,
+        quantity: Math.round((baseQty / u.conversion_factor) * 100) / 100
       }))
     ];
-  };
-
-  const convertToBaseUnit = (quantity: number, unit: string, ingredient: Ingredient) => {
-    if (unit === ingredient.base_unit) return quantity;
-
-    const conversion = ingredient.unit_equivalences?.find(ue => ue.unit_name === unit);
-    if (!conversion) return quantity;
-
-    return quantity * conversion.conversion_factor;
   };
 
   const handleSaveList = async () => {
@@ -334,9 +277,8 @@ export function ShoppingList() {
       toast.error('Por favor ingresa un nombre para la lista');
       return;
     }
-
     try {
-      const { data: list, error: listError } = await supabase
+      const { data: list, error } = await supabase
         .from('shopping_lists')
         .insert({
           name: listName,
@@ -345,38 +287,31 @@ export function ShoppingList() {
         })
         .select()
         .single();
-
-      if (listError) throw listError;
-
-      const items = ingredients.map(item => ({
+      if (error) throw error;
+      const items = ingredients.map(i => ({
         shopping_list_id: list.id,
-        ingredient_id: item.ingredient.id,
-        quantity: item.totalQuantity,
-        custom_quantity: item.customQuantity,
-        custom_unit: item.customUnit,
-        purchased: item.purchased ?? false,
-        recipes: item.recipes
+        ingredient_id: i.ingredient.id,
+        quantity: i.totalQuantity,
+        custom_quantity: i.customQuantity,
+        custom_unit: i.customUnit,
+        purchased: i.purchased ?? false,
+        recipes: i.recipes
       }));
-
-      const { error: itemsError } = await supabase
-        .from('shopping_list_items')
-        .insert(items);
-
-      if (itemsError) throw itemsError;
-
+      const { error: e2 } = await supabase.from('shopping_list_items').insert(items);
+      if (e2) throw e2;
       toast.success('Lista guardada correctamente');
       setListName('');
       await fetchSavedLists();
       setSelectedList(list);
-    } catch (error) {
-      console.error('Error saving list:', error);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al guardar la lista');
     }
   };
 
   const handleCopyList = async (list: SavedList) => {
     try {
-      const { data: newList, error: listError } = await supabase
+      const { data: newList, error } = await supabase
         .from('shopping_lists')
         .insert({
           name: `${list.name} (copia)`,
@@ -386,91 +321,68 @@ export function ShoppingList() {
         })
         .select()
         .single();
-
-      if (listError) throw listError;
-
-      const { data: items, error: itemsError } = await supabase
+      if (error) throw error;
+      const { data: items, error: e2 } = await supabase
         .from('shopping_list_items')
         .select('*')
         .eq('shopping_list_id', list.id);
-
-      if (itemsError) throw itemsError;
-
-      const newItems = items?.map(item => ({
+      if (e2) throw e2;
+      const newItems = items.map((it: any) => ({
         shopping_list_id: newList.id,
-        ingredient_id: item.ingredient_id,
-        quantity: item.quantity,
-        custom_quantity: item.custom_quantity,
-        custom_unit: item.custom_unit,
+        ingredient_id: it.ingredient_id,
+        quantity: it.quantity,
+        custom_quantity: it.custom_quantity,
+        custom_unit: it.custom_unit,
         purchased: false,
-        recipes: item.recipes || []
+        recipes: it.recipes || []
       }));
-
-      const { error: insertError } = await supabase
-        .from('shopping_list_items')
-        .insert(newItems);
-
-      if (insertError) throw insertError;
-
+      const { error: e3 } = await supabase.from('shopping_list_items').insert(newItems);
+      if (e3) throw e3;
       toast.success('Lista copiada correctamente');
       await fetchSavedLists();
       setSelectedList(newList);
-    } catch (error) {
-      console.error('Error copying list:', error);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al copiar la lista');
     }
   };
 
-  const handleUpdateQuantity = async (
-    ingredientId: string,
-    quantity: number,
-    unit: string
-  ) => {
+  const handleUpdateQuantity = async (ingredientId: string, quantity: number, unit: string) => {
     if (!selectedList) return;
-
     try {
       const { error } = await supabase
         .from('shopping_list_items')
-        .update({
-          custom_quantity: quantity,
-          custom_unit: unit
-        })
+        .update({ custom_quantity: quantity, custom_unit: unit })
         .eq('shopping_list_id', selectedList.id)
         .eq('ingredient_id', ingredientId);
-
       if (error) throw error;
-
-      setIngredients(ingredients.map(i =>
-        i.ingredient.id === ingredientId
-          ? { ...i, customQuantity: quantity, customUnit: unit }
-          : i
-      ));
-
+      setIngredients(prev =>
+        prev.map(i =>
+          i.ingredient.id === ingredientId
+            ? { ...i, customQuantity: quantity, customUnit: unit }
+            : i
+        )
+      );
       setEditingItem(null);
       toast.success('Cantidad actualizada');
-    } catch (error) {
-      console.error('Error updating quantity:', error);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al actualizar la cantidad');
     }
   };
 
   const handleTogglePurchased = async (ingredientId: string) => {
     if (!selectedList) return;
-
     try {
       const item = ingredients.find(i => i.ingredient.id === ingredientId);
       if (!item) return;
-
       const newPurchased = !item.purchased;
-
       const { error } = await supabase
         .from('shopping_list_items')
         .update({ purchased: newPurchased })
         .eq('shopping_list_id', selectedList.id)
         .eq('ingredient_id', ingredientId);
-
       if (error) throw error;
-
       setIngredients(prev =>
         prev.map(i =>
           i.ingredient.id === ingredientId
@@ -478,47 +390,40 @@ export function ShoppingList() {
             : i
         )
       );
-    } catch (error) {
-      console.error('Error updating item:', error);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al actualizar el item');
     }
   };
 
   const handleDeleteList = async (listId: string) => {
     if (!window.confirm('¿Estás seguro de que deseas eliminar esta lista?')) return;
-
     try {
-      const { data: dependentLists, error: fetchError } = await supabase
+      const { data: deps, error } = await supabase
         .from('shopping_lists')
         .select('id')
         .eq('original_list_id', listId);
-
-      if (fetchError) throw fetchError;
-
-      if (dependentLists && dependentLists.length > 0) {
-        const { error: deleteError } = await supabase
+      if (error) throw error;
+      if (deps?.length) {
+        const { error: e2 } = await supabase
           .from('shopping_lists')
           .delete()
-          .in('id', dependentLists.map(list => list.id));
-
-        if (deleteError) throw deleteError;
+          .in('id', deps.map(d => d.id));
+        if (e2) throw e2;
       }
-
-      const { error: deleteError } = await supabase
+      const { error: e3 } = await supabase
         .from('shopping_lists')
         .delete()
         .eq('id', listId);
-
-      if (deleteError) throw deleteError;
-
+      if (e3) throw e3;
       toast.success('Lista eliminada correctamente');
       if (selectedList?.id === listId) {
         setSelectedList(null);
         fetchWeeklyIngredients();
       }
       await fetchSavedLists();
-    } catch (error) {
-      console.error('Error deleting list:', error);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al eliminar la lista');
     }
   };
@@ -537,46 +442,47 @@ export function ShoppingList() {
     );
   }
 
+  const grouped = getFilteredAndGroupedIngredients();
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Lista de Compras</h1>
       </div>
-
       <div className="bg-white rounded-lg shadow-md p-4 mb-6">
         <h2 className="text-lg font-semibold mb-4">Filtros</h2>
         <div className="space-y-4">
-          <div>
-            <label className="flex items-center space-x-2 text-sm font-medium text-gray-700">
-              <input
-                type="checkbox"
-                className="rounded border-gray-300"
-                checked={groupByTags}
-                onChange={() => setGroupByTags(!groupByTags)}
-              />
-              <span>Agrupar por categorías</span>
-            </label>
-          </div>
-          <div>
-            <label className="flex items-center space-x-2 text-sm font-medium text-gray-700">
-              <input
-                type="checkbox"
-                className="rounded border-gray-300"
-                checked={showCompleted}
-                onChange={e => setShowCompleted(e.target.checked)}
-              />
-              <span>Mostrar completados</span>
-            </label>
-          </div>
+          <label className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300"
+              checked={groupByTags}
+              onChange={() => setGroupByTags(!groupByTags)}
+            />
+            <span>Agrupar por categorías</span>
+          </label>
+          <label className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300"
+              checked={showCompleted}
+              onChange={e => setShowCompleted(e.target.checked)}
+            />
+            <span>Mostrar completados</span>
+          </label>
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-gray-700">Categorías</h3>
             <div className="flex flex-wrap gap-2">
               {allTags.map(tag => (
                 <button
                   key={tag}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${selectedTags.includes(tag) ? 'bg-blue-100 text-blue-700 border border-blue-400' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                  onClick={() => handleTagToggle(tag)}
                   type="button"
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
+                    selectedTags.includes(tag)
+                      ? 'bg-blue-100 text-blue-700 border border-blue-400'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  onClick={() => handleTagToggle(tag)}
                 >
                   <Tag className="w-3 h-3" />
                   {tag}
@@ -586,327 +492,362 @@ export function ShoppingList() {
           </div>
         </div>
       </div>
-
-      <div className="flex items-center space-x-4">
-        {!selectedList && (
-          <>
+      <div className="max-w-4xl mx-auto px-2 py-3 sm:px-4 sm:py-6">
+        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 mb-2 flex flex-col gap-2 sm:static sm:bg-transparent sm:border-0 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-1 sm:gap-2 w-full overflow-x-auto">
             <button
               onClick={() => setShowDatePicker(!showDatePicker)}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center"
+              className="flex items-center px-2 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition text-xs sm:text-sm whitespace-nowrap"
             >
-              <Calendar className="w-4 h-4 mr-2" />
-              Seleccionar fechas
+              <Calendar className="w-4 h-4 mr-1" />
+              {format(dateRange.start, 'd MMM', { locale: es })} – {format(dateRange.end, 'd MMM', { locale: es })}
             </button>
-            <input
-              type="text"
-              placeholder="Nombre de la lista"
-              value={listName}
-              onChange={(e) => setListName(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <button
-              onClick={handleSaveList}
-              disabled={!listName.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center disabled:opacity-50"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Guardar lista
-            </button>
-          </>
-        )}
-      </div>
-
-      {showDatePicker && !selectedList && (
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha inicio
-              </label>
-              <input
-                type="date"
-                value={format(dateRange.start, 'yyyy-MM-dd')}
-                onChange={(e) => setDateRange({
-                  ...dateRange,
-                  start: parseISO(e.target.value)
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha fin
-              </label>
-              <input
-                type="date"
-                value={format(dateRange.end, 'yyyy-MM-dd')}
-                onChange={(e) => setDateRange({
-                  ...dateRange,
-                  end: parseISO(e.target.value)
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end mt-4">
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-              onClick={() => {
-                setShowDatePicker(false);
-                fetchWeeklyIngredients();
-              }}
-            >
-              Aceptar
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex space-x-4">
-        <div className="w-64 space-y-4">
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <h2 className="text-lg font-semibold mb-4">Listas guardadas</h2>
-            <div className="space-y-2">
-              {savedLists.map((list) => (
-                <div
-                  key={list.id}
-                  className={`p-2 rounded-md ${selectedList?.id === list.id
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'hover:bg-gray-50'
-                    }`}
+            {showDatePicker && (
+              <div className="flex items-center gap-2 pl-2">
+                <input
+                  type="date"
+                  className="border border-gray-300 rounded-md p-1 text-xs"
+                  value={format(dateRange.start, 'yyyy-MM-dd')}
+                  onChange={e =>
+                    setDateRange({ start: parseISO(e.target.value), end: dateRange.end })
+                  }
+                />
+                <span className="px-1">–</span>
+                <input
+                  type="date"
+                  className="border border-gray-300 rounded-md p-1 text-xs"
+                  value={format(dateRange.end, 'yyyy-MM-dd')}
+                  onChange={e =>
+                    setDateRange({ start: dateRange.start, end: parseISO(e.target.value) })
+                  }
+                />
+                <button
+                  onClick={() => setShowDatePicker(false)}
+                  className="ml-2 px-2 py-1 bg-blue-600 text-white rounded text-xs"
                 >
-                  <div className="flex justify-between items-start">
-                    <button
-                      onClick={() => setSelectedList(
-                        selectedList?.id === list.id ? null : list
-                      )}
-                      className="flex-grow text-left"
-                    >
-                      <div className="font-medium">{list.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {format(parseISO(list.start_date), 'dd/MM/yyyy')} -
-                        {format(parseISO(list.end_date), 'dd/MM/yyyy')}
-                      </div>
-                    </button>
-                    <div className="flex space-x-1">
-                      <button
-                        onClick={() => handleCopyList(list)}
-                        className="p-1 text-gray-600 hover:text-gray-800 rounded"
-                        title="Copiar lista"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteList(list.id)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                        title="Eliminar lista"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  {list.original_list_id && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Copia de lista original
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  Aplicar
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() =>
+                setDateRange({
+                  start: addDays(dateRange.start, -7),
+                  end: addDays(dateRange.end, -7)
+                })
+              }
+              className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() =>
+                setDateRange({
+                  start: addDays(dateRange.start, 7),
+                  end: addDays(dateRange.end, 7)
+                })
+              }
+              className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap w-full sm:w-auto">
+            <button
+              onClick={() => setGroupByTags(!groupByTags)}
+              className={`px-2 py-2 rounded-md text-xs sm:text-sm font-medium transition ${
+                groupByTags ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Agrupar por categoría
+            </button>
+            <button
+              onClick={() => setShowCompleted(!showCompleted)}
+              className={`px-2 py-2 rounded-md text-xs sm:text-sm font-medium transition ${
+                showCompleted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {showCompleted ? 'Ver todo' : 'Ocultar comprados'}
+            </button>
           </div>
         </div>
-
         <div className="flex-grow">
           {ingredients.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-lg shadow-md">
               <p className="text-gray-500">No hay ingredientes para comprar</p>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-md">
-              <div className="p-6 space-y-8">
-                {Object.entries(getFilteredAndGroupedIngredients()).map(([tag, items]) => (
-                  <div key={tag} className="space-y-6">
-                    {groupByTags && (
-                      <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-                        <Tag className="w-4 h-4 mr-2" />
-                        {tag}
-                      </h2>
-                    )}
-                    <div className="space-y-4">
-                      {items.map((item) => (
-                        <div
-                          key={item.ingredient.id}
-                          className={`flex items-start space-x-4 p-4 rounded-lg ${item.purchased ? 'bg-green-50' : 'bg-gray-50'
-                            }`}
-                        >
-                          {item.ingredient.image_url && (
-                            <img
-                              src={item.ingredient.image_url}
-                              alt={item.ingredient.name}
-                              className="w-16 h-16 object-cover rounded-md"
-                            />
-                          )}
-                          <div className="flex-grow">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h3 className={`text-lg font-medium ${item.purchased ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                                  {item.ingredient.name}
-                                </h3>
-                                {(() => {
-                                  const totalPortions = item.recipes.reduce((acc, recipe) => {
-                                    const portions = recipe.porciones ?? recipe.portions ?? 0;
-                                    return acc + (typeof portions === 'number' ? portions : 0);
-                                  }, 0);
-                                  return (
-                                    <div className="text-xs text-gray-400">en {totalPortions} porciones</div>
-                                  );
-                                })()}
-                                <div className="text-gray-600 space-y-1">
-                                  {editingItem === item.ingredient.id ? (
-                                    <div className="flex items-center space-x-2">
-                                      <input
-                                        type="number"
-                                        defaultValue={item.customQuantity ?? item.totalQuantity}
-                                        min="0.01"
-                                        step="0.01"
-                                        className="w-24 px-2 py-1 border border-gray-300 rounded-md"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            const input = e.target as HTMLInputElement;
-                                            const select = input.nextElementSibling as HTMLSelectElement;
-                                            handleUpdateQuantity(
-                                              item.ingredient.id,
-                                              parseFloat(input.value),
-                                              select.value
-                                            );
-                                          }
-                                        }}
-                                      />
-                                      <select
-                                        defaultValue={item.customUnit ?? item.ingredient.base_unit}
-                                        className="px-2 py-1 border border-gray-300 rounded-md"
-                                      >
-                                        {[
-                                          item.ingredient.base_unit,
-                                          ...(item.ingredient.unit_equivalences?.map(ue => ue.unit_name) ?? [])
-                                        ]
-                                          .filter((v, i, arr) => arr.indexOf(v) === i)
-                                          .map(unit => (
-                                            <option key={unit} value={unit}>
-                                              {unit}
-                                            </option>
-                                          ))}
-                                      </select>
-                                      <button
-                                        onClick={() => {
-                                          const input = document.querySelector(
-                                            `input[type="number"][defaultValue="${item.customQuantity ?? item.totalQuantity}"]`
-                                          ) as HTMLInputElement;
-                                          const select = input?.nextElementSibling as HTMLSelectElement;
-                                          if (input && select) {
-                                            handleUpdateQuantity(
-                                              item.ingredient.id,
-                                              parseFloat(input.value),
-                                              select.value
-                                            );
-                                          }
-                                        }}
-                                        className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                                      >
-                                        <Check className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <p>
-                                        {item.customQuantity ?? item.totalQuantity} {item.customUnit ?? item.ingredient.base_unit}
-                                      </p>
-                                      {getEquivalences(item).map((eq, idx) => (
-                                        <p key={idx} className="text-sm text-gray-500">
-                                          ≈ {eq.quantity} {eq.unit}
-                                        </p>
-                                      ))}
-                                    </>
+            Object.entries(grouped).map(([group, items]) => (
+              <div key={group} className="mb-4">
+                {group !== 'Todos' && (
+                  <div className="mb-2 text-xs sm:text-sm font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1">
+                    <Tag className="w-4 h-4" /> {group}
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  {items.map(item => (
+                    <div
+                      key={item.ingredient.id}
+                      className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 sm:p-3 rounded-lg border border-gray-100 bg-gray-50 shadow-sm transition-all ${
+                        item.purchased ? 'opacity-60 line-through' : ''
+                      }`}
+                    >
+                      {item.ingredient.image_url && (
+                        <img
+                          src={item.ingredient.image_url}
+                          alt={item.ingredient.name}
+                          className="w-16 h-16 object-cover rounded-md"
+                        />
+                      )}
+                      <div className="flex-grow">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3
+                              className={`text-lg font-medium ${
+                                item.purchased ? 'line-through text-gray-500' : 'text-gray-900'
+                              }`}
+                            >
+                              {item.ingredient.name}
+                            </h3>
+                            <div className="text-xs text-gray-400">
+                              en{' '}
+                              {item.recipes.reduce(
+                                (acc, r) =>
+                                  acc +
+                                  (typeof (r.porciones ?? r.portions) === 'number'
+                                    ? r.porciones ?? r.portions!
+                                    : 0),
+                                0
+                              )}{' '}
+                              porciones
+                            </div>
+                            <div className="text-gray-600 space-y-1">
+                              {editingItem === item.ingredient.id ? (
+  <div className="flex items-center space-x-2">
+    <input
+      type="number"
+      value={
+        editValues[item.ingredient.id]?.quantity ??
+        item.customQuantity ??
+        item.totalQuantity
+      }
+      min="0.01"
+      step="0.01"
+      className="w-24 px-2 py-1 border border-gray-300 rounded-md"
+      onChange={e =>
+        setEditValues(v => ({
+          ...v,
+          [item.ingredient.id]: {
+            ...v[item.ingredient.id],
+            quantity: parseFloat(e.target.value)
+          }
+        }))
+      }
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          const val = editValues[item.ingredient.id];
+          handleUpdateQuantity(
+            item.ingredient.id,
+            val?.quantity ?? item.customQuantity ?? item.totalQuantity,
+            val?.unit ?? item.customUnit ?? item.ingredient.base_unit
+          );
+          setEditingItem(null);
+        }
+      }}
+    />
+    <select
+      value={
+        editValues[item.ingredient.id]?.unit ??
+        item.customUnit ??
+        item.ingredient.base_unit
+      }
+      className="px-2 py-1 border border-gray-300 rounded-md"
+      onChange={e =>
+        setEditValues(v => ({
+          ...v,
+          [item.ingredient.id]: {
+            ...v[item.ingredient.id],
+            unit: e.target.value
+          }
+        }))
+      }
+    >
+      {[
+        item.ingredient.base_unit,
+        ...(item.ingredient.unit_equivalences?.map(ue => ue.unit_name) ?? [])
+      ]
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .map(u => (
+          <option key={u} value={u}>
+            {u}
+          </option>
+        ))}
+    </select>
+    <button
+      onClick={() => {
+        const val = editValues[item.ingredient.id];
+        handleUpdateQuantity(
+          item.ingredient.id,
+          val?.quantity ?? item.customQuantity ?? item.totalQuantity,
+          val?.unit ?? item.customUnit ?? item.ingredient.base_unit
+        );
+        setEditingItem(null);
+      }}
+      className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+    >
+      <Check className="w-4 h-4" />
+    </button>
+  </div>
+) : (
+                                <div>
+                                  <p>
+                                    {item.customQuantity ?? item.totalQuantity}{' '}
+                                    {item.customUnit ?? item.ingredient.base_unit}
+                                  </p>
+                                  {getEquivalences(item).map((eq, i) => (
+                                    <p key={i} className="text-sm text-gray-500">
+                                      ≈ {eq.quantity} {eq.unit}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                              {!groupByTags && item.ingredient.tags?.length! > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {item.ingredient.tags!.map(t => (
+                                    <span
+                                      key={t}
+                                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs flex items-center"
+                                    >
+                                      <Tag className="w-3 h-3 mr-1" />
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            {selectedList && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    setEditingItem(
+                                      editingItem === item.ingredient.id ? null : item.ingredient.id
+                                    )
+                                  }
+                                  className="p-2 text-gray-600 hover:text-gray-800 rounded-md"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleTogglePurchased(item.ingredient.id)}
+                                  className={`p-2 rounded-md ${
+                                    item.purchased
+                                      ? 'bg-green-100 text-green-600'
+                                      : 'bg-gray-100 text-gray-600'
+                                  }`}
+                                >
+                                  <Check className="w-5 h-5" />
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() =>
+                                setShowRecipeInfo(
+                                  showRecipeInfo === item.ingredient.id ? null : item.ingredient.id
+                                )
+                              }
+                              className="p-2 text-gray-400 hover:text-gray-600"
+                            >
+                              <Info className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                        {showRecipeInfo === item.ingredient.id && (
+                          <div className="mt-4 space-y-2">
+                            <h4 className="font-medium text-gray-700">Se utilizará en:</h4>
+                            {item.recipes.length ? (
+                              item.recipes.map((r, i) => (
+                                <div key={i} className="text-sm text-gray-600">
+                                  • {r.name} - {r.meal_type}{' '}
+                                  ({format(parseISO(r.date), 'EEEE d', { locale: es })})
+                                  {r.quantity && r.unit_name && (
+                                    <span className="ml-2 text-xs text-gray-500">
+                                      {r.quantity} {r.unit_name}
+                                    </span>
+                                  )}
+                                  {(r.porciones ?? r.portions) && (
+                                    <span className="ml-2 text-xs text-gray-400">
+                                      en {r.porciones ?? r.portions} porciones
+                                    </span>
                                   )}
                                 </div>
-                                {!groupByTags && item.ingredient.tags && item.ingredient.tags.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    {item.ingredient.tags.map(tag => (
-                                      <span
-                                        key={tag}
-                                        className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs flex items-center"
-                                      >
-                                        <Tag className="w-3 h-3 mr-1" />
-                                        {tag}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex space-x-2">
-                                {selectedList && (
-                                  <>
-                                    <button
-                                      onClick={() => setEditingItem(
-                                        editingItem === item.ingredient.id ? null : item.ingredient.id
-                                      )}
-                                      className="p-2 text-gray-600 hover:text-gray-800 rounded-md"
-                                    >
-                                      <Edit2 className="w-5 h-5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleTogglePurchased(item.ingredient.id)}
-                                      className={`p-2 rounded-md ${item.purchased
-                                        ? 'bg-green-100 text-green-600'
-                                        : 'bg-gray-100 text-gray-600'
-                                        }`}
-                                    >
-                                      <Check className="w-5 h-5" />
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => setShowRecipeInfo(
-                                    showRecipeInfo === item.ingredient.id ? null : item.ingredient.id
-                                  )}
-                                  className="p-2 text-gray-400 hover:text-gray-600"
-                                >
-                                  <Info className="w-5 h-5" />
-                                </button>
-                              </div>
-                            </div>
-                            {showRecipeInfo === item.ingredient.id && (
-                              <div className="mt-4 space-y-2">
-                                <h4 className="font-medium text-gray-700">Se utilizará en:</h4>
-                                {item.recipes.length > 0 ? (
-                                  item.recipes.map((recipe, index) => {
-                                    const portions = recipe.porciones ?? recipe.portions;
-                                    return (
-                                      <div key={index} className="text-sm text-gray-600">
-                                        • {recipe.name} - {recipe.meal_type} ({format(parseISO(recipe.date), 'EEEE d', { locale: es })})
-                                        {typeof recipe.quantity !== 'undefined' && recipe.unit_name && (
-                                          <span className="ml-2 text-xs text-gray-500">{recipe.quantity} {recipe.unit_name}</span>
-                                        )}
-                                        {portions && (
-                                          <span className="ml-2 text-xs text-gray-400">en {portions} porciones</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })
-                                ) : (
-                                  <div className="text-sm text-gray-500 italic">No hay detalles de recetas para este ingrediente.</div>
-                                )}
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 italic">
+                                No hay detalles de recetas para este ingrediente.
                               </div>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            ))
           )}
+        </div>
+      </div>
+      <div className="bg-white rounded-lg shadow-md p-4">
+        <h2 className="text-lg font-semibold mb-4">Listas guardadas</h2>
+        <div className="flex items-center space-x-2 mb-4">
+          <select
+            value={selectedList?.id || ''}
+            onChange={e => {
+              const list = savedLists.find(l => l.id === e.target.value) || null;
+              setSelectedList(list);
+            }}
+            className="flex-1 border border-gray-300 rounded-md px-3 py-2"
+          >
+            <option value="">Lista semanal actual</option>
+            {savedLists.map(list => (
+              <option key={list.id} value={list.id}>
+                {list.name} ({format(parseISO(list.start_date), 'd MMM', { locale: es })} – 
+                {format(parseISO(list.end_date), 'd MMM', { locale: es })})
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => selectedList && handleCopyList(selectedList)}
+            disabled={!selectedList}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            Copiar
+          </button>
+          {selectedList && (
+            <button
+              onClick={() => handleDeleteList(selectedList.id)}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+            >
+              Eliminar
+            </button>
+          )}
+        </div>
+        <div className="space-y-2">
+          <input
+            type="text"
+            placeholder="Nombre para nueva lista"
+            value={listName}
+            onChange={e => setListName(e.target.value)}
+            className="w-full border border-gray-300 rounded-md px-3 py-2"
+          />
+          <button
+            onClick={handleSaveList}
+            className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+          >
+            Guardar nueva lista
+          </button>
         </div>
       </div>
     </div>
