@@ -216,7 +216,7 @@ export function ShoppingList() {
 
           const existing = map.get(ing.id);
           if (existing) {
-            existing.totalQuantity += cantidadTotal;
+            existing.totalQuantity += convertToBaseUnit(cantidadTotal, ing.unit_name, ing);
             const idx = existing.recipes.findIndex(r => r.id === card.recipe_id && r.date === card.date);
             if (idx > -1) {
               existing.recipes[idx].quantity += cantidadTotal;
@@ -235,21 +235,7 @@ export function ShoppingList() {
           } else {
             map.set(ing.id, {
               ingredient: ing,
-              totalQuantity: (() => {
-                // Si la unidad de ing es diferente de la unidad base, convierte a la unidad base
-                if (ing.unit_name && ing.unit_name !== ing.base_unit && Array.isArray(ing.unit_equivalences)) {
-                  const eq = ing.unit_equivalences.find(u => u.unit_name === ing.unit_name);
-                  if (eq && eq.conversion_factor) {
-                    // Si la base es 'unidad', divide; si no, multiplica
-                    if (ing.base_unit.toLowerCase().includes('unidad')) {
-                      return cantidadTotal / eq.conversion_factor;
-                    } else {
-                      return cantidadTotal * eq.conversion_factor;
-                    }
-                  }
-                }
-                return cantidadTotal;
-              })(),
+              totalQuantity: convertToBaseUnit(cantidadTotal, ing.unit_name, ing),
               recipes: [{
                 id: card.recipe_id,
                 name: card.recipe_name,
@@ -290,11 +276,17 @@ export function ShoppingList() {
     return [
       { unit: item.ingredient.base_unit, quantity: Math.round(baseQty * 100) / 100 },
       ...item.ingredient.unit_equivalences.map(u => {
-        const isBaseUnidad = item.ingredient.base_unit.toLowerCase().includes('unidad');
-        return {
-          unit: u.unit_name,
-          quantity: Math.round((isBaseUnidad ? baseQty * u.conversion_factor : baseQty / u.conversion_factor) * 100) / 100
-        };
+        if (item.ingredient.base_unit.toLowerCase().includes('unidad')) {
+          return {
+            unit: u.unit_name,
+            quantity: Math.round((baseQty * u.conversion_factor) * 100) / 100
+          };
+        } else {
+          return {
+            unit: u.unit_name,
+            quantity: Math.round((baseQty / u.conversion_factor) * 100) / 100
+          };
+        }
       })
     ];
   };
