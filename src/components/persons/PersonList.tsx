@@ -122,7 +122,7 @@ export function PersonList() {
                     <span className="font-medium">Calorías:</span> {person.calories}
                   </div>
                   <div>
-                    <span className="font-medium">Carbohidratos:</span> {person.carbs}g
+                    <span className="font-medium">Carbohidratos:</span> {person.carbs}%
                   </div>
                   <div>
                     <span className="font-medium">Fibra:</span> {person.fiber}g
@@ -131,7 +131,7 @@ export function PersonList() {
                     <span className="font-medium">Azúcar:</span> {person.sugar}g
                   </div>
                   <div>
-                    <span className="font-medium">Grasas:</span> {person.fat}g
+                    <span className="font-medium">Grasas:</span> {person.fat}%
                   </div>
                   <div>
                     <span className="font-medium">Proteínas:</span> {person.protein}g

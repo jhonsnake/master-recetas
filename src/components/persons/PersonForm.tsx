@@ -95,12 +95,12 @@ export function PersonForm({ onClose, editingPerson }: PersonFormProps) {
           <div className="grid grid-cols-2 gap-4">
             {[
               { label: 'Calorías', key: 'calories' },
-              { label: 'Carbohidratos', key: 'carbs' },
+              { label: 'Carbohidratos (%)', key: 'carbs', isPercent: true },
               { label: 'Fibra', key: 'fiber' },
               { label: 'Azúcar', key: 'sugar' },
-              { label: 'Grasas', key: 'fat' },
+              { label: 'Grasas (%)', key: 'fat', isPercent: true },
               { label: 'Proteínas', key: 'protein' },
-            ].map(({ label, key }) => (
+            ].map(({ label, key, isPercent }) => (
               <div key={key}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {label}
@@ -108,16 +108,26 @@ export function PersonForm({ onClose, editingPerson }: PersonFormProps) {
                 <input
                   type="number"
                   value={formData[key as keyof typeof formData]}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    let value = parseFloat(e.target.value) || 0;
+                    if (isPercent) {
+                      if (value < 0) value = 0;
+                      if (value > 100) value = 100;
+                    }
                     setFormData({
                       ...formData,
-                      [key]: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  min="0"
+                      [key]: value,
+                    });
+                  }}
+                  min={isPercent ? 0 : undefined}
+                  max={isPercent ? 100 : undefined}
                   step="0.1"
+                  placeholder={isPercent ? "Porcentaje (%)" : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 />
+                {isPercent && (
+                  <span className="text-xs text-gray-500">Ingresa un porcentaje entre 0 y 100</span>
+                )}
               </div>
             ))}
           </div>
