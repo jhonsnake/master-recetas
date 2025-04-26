@@ -201,45 +201,69 @@ export function ShoppingList() {
         .select(`date,meal_type,recipe_id,recipe_name,ingredients`)
         .in('date', dates);
       if (error) throw error;
+
       const map = new Map<string, IngredientSummary>();
       details.forEach((card: any) => {
         card.ingredients?.forEach((ing: any) => {
+          const recetaPorciones = ing.porciones ?? card.porciones ?? card.portions ?? 1;
+          const planPorciones = card.porciones ?? card.portions ?? recetaPorciones;
+          const cantidadPorPorcion = (ing.quantity ?? 0) / recetaPorciones;
+          const cantidadTotal = cantidadPorPorcion * planPorciones;
+
+
+
           if (!ing?.id) return;
+
           const existing = map.get(ing.id);
           if (existing) {
-            existing.totalQuantity += ing.quantity;
+            existing.totalQuantity += cantidadTotal;
             const idx = existing.recipes.findIndex(r => r.id === card.recipe_id && r.date === card.date);
             if (idx > -1) {
-              existing.recipes[idx].quantity += ing.quantity;
-              existing.recipes[idx].porciones! += ing.porciones!;
+              existing.recipes[idx].quantity += cantidadTotal;
+              existing.recipes[idx].porciones = (existing.recipes[idx].porciones ?? 0) + planPorciones;
             } else {
               existing.recipes.push({
                 id: card.recipe_id,
                 name: card.recipe_name,
                 date: card.date,
                 meal_type: card.meal_type,
-                quantity: ing.quantity,
+                quantity: cantidadTotal,
                 unit_name: ing.unit_name,
-                porciones: ing.porciones
+                porciones: planPorciones
               });
             }
           } else {
             map.set(ing.id, {
               ingredient: ing,
-              totalQuantity: ing.quantity,
+              totalQuantity: (() => {
+                // Si la unidad de ing es diferente de la unidad base, convierte a la unidad base
+                if (ing.unit_name && ing.unit_name !== ing.base_unit && Array.isArray(ing.unit_equivalences)) {
+                  const eq = ing.unit_equivalences.find(u => u.unit_name === ing.unit_name);
+                  if (eq && eq.conversion_factor) {
+                    // Si la base es 'unidad', divide; si no, multiplica
+                    if (ing.base_unit.toLowerCase().includes('unidad')) {
+                      return cantidadTotal / eq.conversion_factor;
+                    } else {
+                      return cantidadTotal * eq.conversion_factor;
+                    }
+                  }
+                }
+                return cantidadTotal;
+              })(),
               recipes: [{
                 id: card.recipe_id,
                 name: card.recipe_name,
                 date: card.date,
                 meal_type: card.meal_type,
-                quantity: ing.quantity,
+                quantity: cantidadTotal,
                 unit_name: ing.unit_name,
-                porciones: ing.porciones
+                porciones: planPorciones
               }]
             });
           }
         });
       });
+
       setIngredients(Array.from(map.values()));
     } catch (err) {
       console.error(err);
@@ -265,10 +289,13 @@ export function ShoppingList() {
       : qty;
     return [
       { unit: item.ingredient.base_unit, quantity: Math.round(baseQty * 100) / 100 },
-      ...item.ingredient.unit_equivalences.map(u => ({
-        unit: u.unit_name,
-        quantity: Math.round((baseQty / u.conversion_factor) * 100) / 100
-      }))
+      ...item.ingredient.unit_equivalences.map(u => {
+        const isBaseUnidad = item.ingredient.base_unit.toLowerCase().includes('unidad');
+        return {
+          unit: u.unit_name,
+          quantity: Math.round((isBaseUnidad ? baseQty * u.conversion_factor : baseQty / u.conversion_factor) * 100) / 100
+        };
+      })
     ];
   };
 
@@ -432,7 +459,7 @@ export function ShoppingList() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <svg className="animate-spin h-8 w-8 mx-auto mb-2 text-blue-600" viewBox="0 0 24 24">
+          <svg className="animate whitenoise-spin h-8 w-8 mx-auto mb-2 text-blue-600" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
@@ -477,11 +504,10 @@ export function ShoppingList() {
                 <button
                   key={tag}
                   type="button"
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    selectedTags.includes(tag)
-                      ? 'bg-blue-100 text-blue-700 border border-blue-400'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${selectedTags.includes(tag)
+                    ? 'bg-blue-100 text-blue-700 border border-blue-400'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                   onClick={() => handleTagToggle(tag)}
                 >
                   <Tag className="w-3 h-3" />
@@ -492,12 +518,63 @@ export function ShoppingList() {
           </div>
         </div>
       </div>
+      <div className="bg-white rounded-lg shadow-md p-4">
+        <h2 className="text-lg font-semibold mb-4">Listas guardadas</h2>
+        <div className="flex items-center space-x-2 mb-4">
+          <select
+            value={selectedList?.id || ''}
+            onChange={e => {
+              const list = savedLists.find(l => l.id === e.target.value) || null;
+              setSelectedList(list);
+            }}
+            className="flex-1 border border-gray-300 rounded-md px-3 py-2"
+          >
+            <option value="">Lista semanal actual</option>
+            {savedLists.map(list => (
+              <option key={list.id} value={list.id}>
+                {list.name} ({format(parseISO(list.start_date), 'd MMM', { locale: es })} –
+                {format(parseISO(list.end_date), 'd MMM', { locale: es })})
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => selectedList && handleCopyList(selectedList)}
+            disabled={!selectedList}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            Copiar
+          </button>
+          {selectedList && (
+            <button
+              onClick={() => handleDeleteList(selectedList.id)}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+            >
+              Eliminar
+            </button>
+          )}
+        </div>
+        <div className="space-y-2">
+          <input
+            type="text"
+            placeholder="Nombre para nueva lista"
+            value={listName}
+            onChange={e => setListName(e.target.value)}
+            className="w-full border border-gray-300 rounded-md px-3 py-2"
+          />
+          <button
+            onClick={handleSaveList}
+            className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+          >
+            Guardar nueva lista
+          </button>
+        </div>
+      </div>
       <div className="max-w-4xl mx-auto px-2 py-3 sm:px-4 sm:py-6">
         <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 mb-2 flex flex-col gap-2 sm:static sm:bg-transparent sm:border-0 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-1 sm:gap-2 w-full overflow-x-auto">
             <button
               onClick={() => setShowDatePicker(!showDatePicker)}
-              className="flex items-center px-2 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition text-xs sm:text-sm whitespace-nowrap"
+              className="flex items-center px-2 py-2 rounded-md bg-blue-600 text rate-limit text-white hover:bg-blue-700 transition text-xs sm:text-sm whitespace-nowrap"
             >
               <Calendar className="w-4 h-4 mr-1" />
               {format(dateRange.start, 'd MMM', { locale: es })} – {format(dateRange.end, 'd MMM', { locale: es })}
@@ -555,17 +632,15 @@ export function ShoppingList() {
           <div className="flex items-center gap-1 flex-wrap w-full sm:w-auto">
             <button
               onClick={() => setGroupByTags(!groupByTags)}
-              className={`px-2 py-2 rounded-md text-xs sm:text-sm font-medium transition ${
-                groupByTags ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-2 py-2 rounded-md text-xs sm:text-sm font-medium transition ${groupByTags ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               Agrupar por categoría
             </button>
             <button
               onClick={() => setShowCompleted(!showCompleted)}
-              className={`px-2 py-2 rounded-md text-xs sm:text-sm font-medium transition ${
-                showCompleted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-2 py-2 rounded-md text-xs sm:text-sm font-medium transition ${showCompleted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               {showCompleted ? 'Ver todo' : 'Ocultar comprados'}
             </button>
@@ -588,9 +663,8 @@ export function ShoppingList() {
                   {items.map(item => (
                     <div
                       key={item.ingredient.id}
-                      className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 sm:p-3 rounded-lg border border-gray-100 bg-gray-50 shadow-sm transition-all ${
-                        item.purchased ? 'opacity-60 line-through' : ''
-                      }`}
+                      className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 sm:p-3 rounded-lg border border-gray-100 bg-gray-50 shadow-sm transition-all ${item.purchased ? 'opacity-60 line-through' : ''
+                        }`}
                     >
                       {item.ingredient.image_url && (
                         <img
@@ -603,9 +677,8 @@ export function ShoppingList() {
                         <div className="flex justify-between items-start">
                           <div>
                             <h3
-                              className={`text-lg font-medium ${
-                                item.purchased ? 'line-through text-gray-500' : 'text-gray-900'
-                              }`}
+                              className={`text-lg font-medium ${item.purchased ? 'line-through text-gray-500' : 'text-gray-900'
+                                }`}
                             >
                               {item.ingredient.name}
                             </h3>
@@ -623,82 +696,82 @@ export function ShoppingList() {
                             </div>
                             <div className="text-gray-600 space-y-1">
                               {editingItem === item.ingredient.id ? (
-  <div className="flex items-center space-x-2">
-    <input
-      type="number"
-      value={
-        editValues[item.ingredient.id]?.quantity ??
-        item.customQuantity ??
-        item.totalQuantity
-      }
-      min="0.01"
-      step="0.01"
-      className="w-24 px-2 py-1 border border-gray-300 rounded-md"
-      onChange={e =>
-        setEditValues(v => ({
-          ...v,
-          [item.ingredient.id]: {
-            ...v[item.ingredient.id],
-            quantity: parseFloat(e.target.value)
-          }
-        }))
-      }
-      onKeyDown={e => {
-        if (e.key === 'Enter') {
-          const val = editValues[item.ingredient.id];
-          handleUpdateQuantity(
-            item.ingredient.id,
-            val?.quantity ?? item.customQuantity ?? item.totalQuantity,
-            val?.unit ?? item.customUnit ?? item.ingredient.base_unit
-          );
-          setEditingItem(null);
-        }
-      }}
-    />
-    <select
-      value={
-        editValues[item.ingredient.id]?.unit ??
-        item.customUnit ??
-        item.ingredient.base_unit
-      }
-      className="px-2 py-1 border border-gray-300 rounded-md"
-      onChange={e =>
-        setEditValues(v => ({
-          ...v,
-          [item.ingredient.id]: {
-            ...v[item.ingredient.id],
-            unit: e.target.value
-          }
-        }))
-      }
-    >
-      {[
-        item.ingredient.base_unit,
-        ...(item.ingredient.unit_equivalences?.map(ue => ue.unit_name) ?? [])
-      ]
-        .filter((v, i, a) => a.indexOf(v) === i)
-        .map(u => (
-          <option key={u} value={u}>
-            {u}
-          </option>
-        ))}
-    </select>
-    <button
-      onClick={() => {
-        const val = editValues[item.ingredient.id];
-        handleUpdateQuantity(
-          item.ingredient.id,
-          val?.quantity ?? item.customQuantity ?? item.totalQuantity,
-          val?.unit ?? item.customUnit ?? item.ingredient.base_unit
-        );
-        setEditingItem(null);
-      }}
-      className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-    >
-      <Check className="w-4 h-4" />
-    </button>
-  </div>
-) : (
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="number"
+                                    value={
+                                      editValues[item.ingredient.id]?.quantity ??
+                                      item.customQuantity ??
+                                      item.totalQuantity
+                                    }
+                                    min="0.01"
+                                    step="0.01"
+                                    className="w-24 px-2 py-1 border border-gray-300 rounded-md"
+                                    onChange={e =>
+                                      setEditValues(v => ({
+                                        ...v,
+                                        [item.ingredient.id]: {
+                                          ...v[item.ingredient.id],
+                                          quantity: parseFloat(e.target.value)
+                                        }
+                                      }))
+                                    }
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') {
+                                        const val = editValues[item.ingredient.id];
+                                        handleUpdateQuantity(
+                                          item.ingredient.id,
+                                          val?.quantity ?? item.customQuantity ?? item.totalQuantity,
+                                          val?.unit ?? item.customUnit ?? item.ingredient.base_unit
+                                        );
+                                        setEditingItem(null);
+                                      }
+                                    }}
+                                  />
+                                  <select
+                                    value={
+                                      editValues[item.ingredient.id]?.unit ??
+                                      item.customUnit ??
+                                      item.ingredient.base_unit
+                                    }
+                                    className="px-2 py-1 border border-gray-300 rounded-md"
+                                    onChange={e =>
+                                      setEditValues(v => ({
+                                        ...v,
+                                        [item.ingredient.id]: {
+                                          ...v[item.ingredient.id],
+                                          unit: e.target.value
+                                        }
+                                      }))
+                                    }
+                                  >
+                                    {[
+                                      item.ingredient.base_unit,
+                                      ...(item.ingredient.unit_equivalences?.map(ue => ue.unit_name) ?? [])
+                                    ]
+                                      .filter((v, i, a) => a.indexOf(v) === i)
+                                      .map(u => (
+                                        <option key={u} value={u}>
+                                          {u}
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <button
+                                    onClick={() => {
+                                      const val = editValues[item.ingredient.id];
+                                      handleUpdateQuantity(
+                                        item.ingredient.id,
+                                        val?.quantity ?? item.customQuantity ?? item.totalQuantity,
+                                        val?.unit ?? item.customUnit ?? item.ingredient.base_unit
+                                      );
+                                      setEditingItem(null);
+                                    }}
+                                    className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
                                 <div>
                                   <p>
                                     {item.customQuantity ?? item.totalQuantity}{' '}
@@ -741,11 +814,10 @@ export function ShoppingList() {
                                 </button>
                                 <button
                                   onClick={() => handleTogglePurchased(item.ingredient.id)}
-                                  className={`p-2 rounded-md ${
-                                    item.purchased
-                                      ? 'bg-green-100 text-green-600'
-                                      : 'bg-gray-100 text-gray-600'
-                                  }`}
+                                  className={`p-2 rounded-md ${item.purchased
+                                    ? 'bg-green-100 text-green-600'
+                                    : 'bg-gray-100 text-gray-600'
+                                    }`}
                                 >
                                   <Check className="w-5 h-5" />
                                 </button>
@@ -799,57 +871,7 @@ export function ShoppingList() {
           )}
         </div>
       </div>
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <h2 className="text-lg font-semibold mb-4">Listas guardadas</h2>
-        <div className="flex items-center space-x-2 mb-4">
-          <select
-            value={selectedList?.id || ''}
-            onChange={e => {
-              const list = savedLists.find(l => l.id === e.target.value) || null;
-              setSelectedList(list);
-            }}
-            className="flex-1 border border-gray-300 rounded-md px-3 py-2"
-          >
-            <option value="">Lista semanal actual</option>
-            {savedLists.map(list => (
-              <option key={list.id} value={list.id}>
-                {list.name} ({format(parseISO(list.start_date), 'd MMM', { locale: es })} – 
-                {format(parseISO(list.end_date), 'd MMM', { locale: es })})
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => selectedList && handleCopyList(selectedList)}
-            disabled={!selectedList}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            Copiar
-          </button>
-          {selectedList && (
-            <button
-              onClick={() => handleDeleteList(selectedList.id)}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-              Eliminar
-            </button>
-          )}
-        </div>
-        <div className="space-y-2">
-          <input
-            type="text"
-            placeholder="Nombre para nueva lista"
-            value={listName}
-            onChange={e => setListName(e.target.value)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
-          />
-          <button
-            onClick={handleSaveList}
-            className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            Guardar nueva lista
-          </button>
-        </div>
-      </div>
+
     </div>
   );
 }
